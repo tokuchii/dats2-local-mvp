@@ -15,7 +15,7 @@ async def subscribe() -> AsyncGenerator[str, None]:
     try:
         while True:
             try:
-                data = await asyncio.wait_for(queue.get(), timeout=30)
+                data = await asyncio.wait_for(queue.get(), timeout=10)
                 yield f"data: {data}\n\n"
             except asyncio.TimeoutError:
                 yield ": heartbeat\n\n"
