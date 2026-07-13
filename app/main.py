@@ -380,7 +380,6 @@ def audit_page(request: Request):
 
 @app.get("/export/current.xlsx")
 def export_xlsx(request: Request):
-    ensure_api_auth(request)
     return Response(
         export_xlsx_bytes(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -390,7 +389,6 @@ def export_xlsx(request: Request):
 
 @app.get("/export/current.csv")
 def export_csv(request: Request):
-    ensure_api_auth(request)
     return Response(
         export_csv_bytes(),
         media_type="text/csv; charset=utf-8",
