@@ -1,15 +1,12 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-echo This will remove local submissions, approvals, versions and audit events.
-set /p answer=Type RESET to rebuild from the bundled master workbook: 
-if /I not "%answer%"=="RESET" exit /b
-if exist data\dats2.sqlite3 del /q data\dats2.sqlite3
-if exist data\dats2.sqlite3-shm del /q data\dats2.sqlite3-shm
-if exist data\dats2.sqlite3-wal del /q data\dats2.sqlite3-wal
+echo WARNING: This will DELETE ALL DATA from the database.
+set /p answer=Type DELETE to confirm:
+if /I not "%answer%"=="DELETE" exit /b
 if exist .venv\Scripts\python.exe (
-  .venv\Scripts\python.exe -c "from app.db import init_db; init_db(); print('Database rebuilt.')"
+  .venv\Scripts\python.exe reset_db.py
 ) else (
-  python -c "from app.db import init_db; init_db(); print('Database rebuilt.')"
+  python reset_db.py
 )
 pause

@@ -1,24 +1,34 @@
 from __future__ import annotations
 
-import json
-import shutil
+import hmac
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .agent import DATS_CATEGORIES, process_submission
 from .config import MAX_UPLOAD_MB, REVIEWER_TOKEN, ROOT, UPLOAD_DIR
+from .sse import publish, subscribe
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+log = logging.getLogger("dats2")
 from .db import (
     approve_candidate,
+    count_candidates,
+    count_systems,
     create_submission,
     export_csv_bytes,
     export_xlsx_bytes,
     get_candidate,
+    get_filter_values,
     get_submission,
     get_summary,
     get_system,
@@ -37,8 +47,21 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="DATS 2.0 Local Agentic Dashboard", version="1.0.0", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=ROOT / "app" / "static"), name="static")
+static_dir = ROOT / "app" / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 templates = Jinja2Templates(directory=ROOT / "app" / "templates")
+
+
+def _safe_url(value: str | None) -> str:
+    if not value:
+        return ""
+    if value.startswith(("http://", "https://")):
+        return value
+    return ""
+
+
+templates.env.filters["safe_url"] = _safe_url
 
 
 def context(request: Request, **kwargs):
@@ -52,21 +75,37 @@ def split_form_tags(value: str | None) -> list[str]:
 
 
 def ensure_reviewer(token: str) -> None:
-    if token != REVIEWER_TOKEN:
+    if not hmac.compare_digest(token, REVIEWER_TOKEN):
         raise HTTPException(status_code=401, detail="Invalid reviewer token")
+
+
+def ensure_api_auth(request: Request) -> None:
+    token = request.query_params.get("token", "")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not hmac.compare_digest(token, REVIEWER_TOKEN):
+        raise HTTPException(status_code=401, detail="API token required. Pass ?token=... or Authorization: Bearer ...")
 
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "url": "http://localhost:8501"}
+    return {"status": "ok", "version": "1.0.0"}
+
+
+@app.get("/api/events")
+async def sse_events():
+    return StreamingResponse(subscribe(), media_type="text/event-stream")
 
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     summary = get_summary()
     recent = list_systems(limit=8)
+    total_candidates = count_candidates("proposed")
     candidates = list_candidates("proposed")[:5]
-    return templates.TemplateResponse(request, "dashboard.html", context(request, summary=summary, recent=recent, candidates=candidates))
+    return templates.TemplateResponse(request, "dashboard.html", context(request, summary=summary, recent=recent, candidates=candidates, total_candidates=total_candidates))
 
 
 @app.get("/systems", response_class=HTMLResponse)
@@ -77,12 +116,14 @@ def systems_page(
     status: str = "",
     commodity: str = "",
     livestock: str = "",
+    page: int = 1,
 ):
-    systems = list_systems(search, category, status, commodity, livestock, limit=1000)
-    all_systems = list_systems(limit=5000)
-    statuses = sorted({s.get("operating_status") for s in all_systems if s.get("operating_status")})
-    commodities = sorted({tag for s in all_systems for tag in s.get("commodity_tags", [])})
-    livestock_values = sorted({s.get("livestock_coverage") for s in all_systems if s.get("livestock_coverage")})
+    per_page = 50
+    total = count_systems(search, category, status, commodity, livestock)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    systems = list_systems(search, category, status, commodity, livestock, limit=per_page, offset=(page - 1) * per_page)
+    filters = get_filter_values()
     return templates.TemplateResponse(
         request,
         "systems.html",
@@ -90,9 +131,12 @@ def systems_page(
             request,
             systems=systems,
             filters={"search": search, "category": category, "status": status, "commodity": commodity, "livestock": livestock},
-            statuses=statuses,
-            commodities=commodities,
-            livestock_values=livestock_values,
+            statuses=filters["statuses"],
+            commodities=filters["commodities"],
+            livestock_values=filters["livestock"],
+            page=page,
+            total_pages=total_pages,
+            total=total,
         ),
     )
 
@@ -118,7 +162,8 @@ def submit_url(
 ):
     submission_id = create_submission("url", source_uri=url.strip(), submitted_by=submitted_by.strip() or None)
     background_tasks.add_task(process_submission, submission_id)
-    return RedirectResponse(f"/submissions/{submission_id}", status_code=303)
+    publish("submission_created", {"submission_id": submission_id, "source_type": "url"})
+    return RedirectResponse(f"/submissions/{submission_id}?success=URL+submitted+for+assessment", status_code=303)
 
 
 @app.post("/submit/text")
@@ -130,6 +175,8 @@ def submit_text(
 ):
     if len(text.strip()) < 40:
         raise HTTPException(400, "Please paste a fuller description or evidence excerpt")
+    if len(text.strip()) > 100_000:
+        raise HTTPException(400, "Text exceeds 100,000 character limit")
     submission_id = create_submission(
         "text",
         source_uri=source_url.strip() or None,
@@ -137,7 +184,8 @@ def submit_text(
         submitted_by=submitted_by.strip() or None,
     )
     background_tasks.add_task(process_submission, submission_id)
-    return RedirectResponse(f"/submissions/{submission_id}", status_code=303)
+    publish("submission_created", {"submission_id": submission_id, "source_type": "text"})
+    return RedirectResponse(f"/submissions/{submission_id}?success=Text+submitted+for+assessment", status_code=303)
 
 
 @app.post("/submit/file")
@@ -148,7 +196,7 @@ def submit_file(
 ):
     original_name = file.filename or "upload"
     suffix = Path(original_name).suffix.lower()
-    allowed = {".pdf", ".txt", ".md", ".csv", ".json"}
+    allowed = {".pdf", ".txt", ".md", ".csv", ".json", ".xlsx", ".xls"}
     if suffix not in allowed:
         raise HTTPException(400, f"Allowed types: {', '.join(sorted(allowed))}")
     target = UPLOAD_DIR / f"{uuid4().hex}{suffix}"
@@ -165,7 +213,8 @@ def submit_file(
         "file", source_uri=original_name, uploaded_path=str(target), submitted_by=submitted_by.strip() or None
     )
     background_tasks.add_task(process_submission, submission_id)
-    return RedirectResponse(f"/submissions/{submission_id}", status_code=303)
+    publish("submission_created", {"submission_id": submission_id, "source_type": "file"})
+    return RedirectResponse(f"/submissions/{submission_id}?success=File+uploaded+for+assessment", status_code=303)
 
 
 @app.get("/submissions/{submission_id}", response_class=HTMLResponse)
@@ -218,6 +267,7 @@ def save_candidate(
     maturity: str = Form(""),
     operating_status: str = Form(""),
     evidence_of_scale: str = Form(""),
+    main_scaling_strength: str = Form(""),
     primary_bottleneck: str = Form(""),
     interoperability_score: int = Form(1),
     interoperability_reason: str = Form(""),
@@ -256,6 +306,7 @@ def save_candidate(
         "maturity": maturity.strip() or None,
         "operating_status": operating_status.strip() or None,
         "evidence_of_scale": evidence_of_scale.strip() or None,
+        "main_scaling_strength": main_scaling_strength.strip() or None,
         "primary_bottleneck": primary_bottleneck.strip() or None,
         "interoperability_score": max(0, min(int(interoperability_score), 4)),
         "interoperability_reason": interoperability_reason.strip(),
@@ -272,7 +323,8 @@ def save_candidate(
         "source_url": source_url.strip() or None,
     })
     save_candidate_payload(candidate_id, payload)
-    return RedirectResponse(f"/review/{candidate_id}?saved=1", status_code=303)
+    publish("candidate_saved", {"candidate_id": candidate_id})
+    return RedirectResponse(f"/review/{candidate_id}?success=Candidate+saved", status_code=303)
 
 
 @app.post("/review/{candidate_id}/approve")
@@ -288,7 +340,8 @@ def approve(
         result = approve_candidate(candidate_id, reviewer_name.strip() or "local-reviewer", reviewer_note.strip() or None, merge_into.strip() or None)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    return RedirectResponse(f"/systems/{result['dats2_id']}?approved=1", status_code=303)
+    publish("system_approved", {"dats2_id": result["dats2_id"], "version": result["version"]})
+    return RedirectResponse(f"/systems/{result['dats2_id']}?success=System+approved+successfully", status_code=303)
 
 
 @app.post("/review/{candidate_id}/reject")
@@ -303,7 +356,8 @@ def reject(
         reject_candidate(candidate_id, reviewer_name.strip() or "local-reviewer", reviewer_note.strip() or None)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    return RedirectResponse("/review", status_code=303)
+    publish("candidate_rejected", {"candidate_id": candidate_id})
+    return RedirectResponse("/review?success=Candidate+rejected", status_code=303)
 
 
 @app.get("/audit", response_class=HTMLResponse)
@@ -312,7 +366,8 @@ def audit_page(request: Request):
 
 
 @app.get("/export/current.xlsx")
-def export_xlsx():
+def export_xlsx(request: Request):
+    ensure_api_auth(request)
     return Response(
         export_xlsx_bytes(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -321,7 +376,8 @@ def export_xlsx():
 
 
 @app.get("/export/current.csv")
-def export_csv():
+def export_csv(request: Request):
+    ensure_api_auth(request)
     return Response(
         export_csv_bytes(),
         media_type="text/csv; charset=utf-8",
@@ -330,17 +386,20 @@ def export_csv():
 
 
 @app.get("/api/summary")
-def api_summary():
+def api_summary(request: Request):
+    ensure_api_auth(request)
     return get_summary()
 
 
 @app.get("/api/systems")
-def api_systems(search: str = "", category: str = "", status: str = "", commodity: str = "", livestock: str = "", limit: int = 500):
+def api_systems(request: Request, search: str = "", category: str = "", status: str = "", commodity: str = "", livestock: str = "", limit: int = 500):
+    ensure_api_auth(request)
     return list_systems(search, category, status, commodity, livestock, limit)
 
 
 @app.get("/api/systems/{dats2_id}")
-def api_system(dats2_id: str):
+def api_system(request: Request, dats2_id: str):
+    ensure_api_auth(request)
     system = get_system(dats2_id)
     if not system:
         raise HTTPException(404, "System not found")
@@ -348,5 +407,6 @@ def api_system(dats2_id: str):
 
 
 @app.get("/api/candidates")
-def api_candidates(status: str = "proposed"):
+def api_candidates(request: Request, status: str = "proposed"):
+    ensure_api_auth(request)
     return list_candidates(status)

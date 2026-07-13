@@ -2,5 +2,48 @@
 {% block title %}Audit log — DATS 2.0{% endblock %}
 {% block content %}
 <div class="page-heading"><div><p class="eyebrow">Governance trail</p><h1>Audit log</h1><p>Imports, approvals, merges and rejections are retained as immutable activity records.</p></div></div>
-<section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead><tbody>{% for event in events %}<tr><td>{{ event.created_at }}</td><td>{{ event.actor }}</td><td>{{ event.action }}</td><td>{{ event.entity_type }} · {{ event.entity_id }}</td><td><code>{{ event.details }}</code></td></tr>{% else %}<tr><td colspan="5" class="empty">No audit events.</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="panel table-panel"><div class="table-wrap"><table class="wide-table"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th></tr></thead><tbody>{% for event in events %}<tr>
+  <td style="white-space:nowrap;">{{ event.created_at }}</td>
+  <td><span class="tag">{{ event.actor }}</span></td>
+  <td>
+    {% if event.action == 'import_master' %}
+      <span class="tag primary-tag">Import</span>
+    {% elif event.action == 'approve_candidate' %}
+      <span class="tag" style="background:#d4edda;color:#155724;">Approved</span>
+    {% elif event.action == 'reject_candidate' %}
+      <span class="tag" style="background:#f8d7da;color:#721c24;">Rejected</span>
+    {% else %}
+      <span class="tag">{{ event.action }}</span>
+    {% endif %}
+  </td>
+  <td>
+    {% if event.entity_type == 'system' and event.entity_id %}
+      <a href="/systems/{{ event.entity_id }}">{{ event.entity_id }}</a>
+    {% elif event.entity_type == 'candidate' and event.entity_id %}
+      <a href="/review/{{ event.entity_id }}">Candidate #{{ event.entity_id }}</a>
+    {% else %}
+      {{ event.entity_type }} · {{ event.entity_id }}
+    {% endif %}
+  </td>
+  <td>
+    {% if event.action == 'import_master' %}
+      Imported <strong>{{ event.details.imported }}</strong> systems from <code>{{ event.details.file }}</code>
+    {% elif event.action == 'approve_candidate' %}
+      {% if event.details.merge_into %}
+        Merged into <a href="/systems/{{ event.details.merge_into }}">{{ event.details.merge_into }}</a>
+      {% else %}
+        Created new system entry
+      {% endif %}
+      {% if event.details.note %}<br><small style="color:#666;">Note: {{ event.details.note }}</small>{% endif %}
+    {% elif event.action == 'reject_candidate' %}
+      {% if event.details.note %}
+        {{ event.details.note }}
+      {% else %}
+        <span style="color:#999;">No note provided</span>
+      {% endif %}
+    {% else %}
+      <code>{{ event.details }}</code>
+    {% endif %}
+  </td>
+</tr>{% else %}<tr><td colspan="5" class="empty">No audit events.</td></tr>{% endfor %}</tbody></table></div></section>
 {% endblock %}

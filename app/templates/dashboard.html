@@ -71,7 +71,7 @@
   </section>
 
   <section class="panel">
-    <div class="panel-heading"><div><p class="eyebrow">Human-in-the-loop</p><h2>Review queue</h2></div><a href="/review">Open queue</a></div>
+    <div class="panel-heading"><div><p class="eyebrow">Human-in-the-loop</p><h2>Review queue</h2></div><a href="/review">Open queue{% if total_candidates > 5 %} ({{ total_candidates }} total){% endif %}</a></div>
     {% if candidates %}
       <div class="card-list">
       {% for item in candidates %}

@@ -20,13 +20,21 @@ The application starts with the bundled 133-system master database and supports:
 
 1. Extract the ZIP to a normal folder, such as `Documents\DATS2`.
 2. Install **Python 3.11 or newer** if it is not already installed.
-3. Double-click:
+3. Install **PostgreSQL** if not already installed and create a database.
+4. Run the schema:
+
+   ```bash
+   psql -U <user> -d <database> -f schema/postgresql.sql
+   ```
+
+5. Edit `.env` and set `DATABASE_URL` to your PostgreSQL connection string.
+6. Double-click:
 
    ```text
    START_DATS2_WINDOWS.bat
    ```
 
-4. The browser opens at:
+7. The browser opens at:
 
    ```text
    http://localhost:8501
@@ -110,7 +118,7 @@ The agent never directly changes a canonical system record.
 |---|---|
 | Web application/API | FastAPI |
 | Pages | Jinja2 + vanilla CSS |
-| Database | SQLite with WAL mode |
+| Database | PostgreSQL (psycopg2) |
 | Master import/export | OpenPyXL |
 | Web acquisition | HTTPX + BeautifulSoup |
 | PDF extraction | pypdf |
@@ -118,7 +126,7 @@ The agent never directly changes a canonical system record.
 | Optional local model | Ollama structured JSON output |
 | Server | Uvicorn |
 
-There is no Node.js, Docker, PostgreSQL, Redis, Celery, or cloud service requirement for the local MVP.
+There is no Node.js, Docker, Redis, Celery, or cloud service requirement for the local MVP.
 
 ## Main pages
 
@@ -133,19 +141,17 @@ There is no Node.js, Docker, PostgreSQL, Redis, Celery, or cloud service require
 
 ## Database and backups
 
-The live database is:
+The application connects to PostgreSQL using the `DATABASE_URL` environment variable in `.env`.
 
-```text
-data/dats2.sqlite3
+Run the schema once on your PostgreSQL instance:
+
+```bash
+psql -U <user> -d <database> -f schema/postgresql.sql
 ```
 
-Use `BACKUP_DATABASE_WINDOWS.bat` or copy the SQLite file while the application is stopped.
+Use `BACKUP_DATABASE_WINDOWS.bat` or `pg_dump` to back up the database.
 
-Use `RESET_DATABASE_WINDOWS.bat` to delete the live database and rebuild it from:
-
-```text
-data/DATS_2.0_Philippines_Master_2026.xlsx
-```
+Use `RESET_DATABASE_WINDOWS.bat` to rebuild the database from the bundled master workbook.
 
 ## Security boundaries in this MVP
 
@@ -167,7 +173,7 @@ Before a public internet deployment, add:
 - antivirus/document sandboxing;
 - rate limiting and CAPTCHA;
 - production SSRF controls using an outbound proxy;
-- PostgreSQL, task workers, object storage, backups, and observability;
+- task workers, object storage, backups, and observability;
 - source terms/robots compliance and domain crawl policy;
 - model evaluation and prompt/version registry;
 - claim-level reviewer interfaces and two-person approval for sensitive changes.

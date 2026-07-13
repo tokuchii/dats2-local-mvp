@@ -29,8 +29,9 @@ def test_dashboard_and_master_import():
 
 def test_pasted_text_assessment_and_review():
     with connect() as conn:
-        conn.execute("DELETE FROM candidates")
-        conn.execute("DELETE FROM submissions")
+        cur = conn.cursor()
+        cur.execute("DELETE FROM candidates")
+        cur.execute("DELETE FROM submissions")
     text = """
     PoultrySense is a Philippine research prototype developed by Example State University.
     The Android application uses IoT temperature, humidity and ammonia sensors to monitor poultry houses.

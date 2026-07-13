@@ -2,7 +2,7 @@
 {% block title %}Systems — DATS 2.0{% endblock %}
 {% block content %}
 <div class="page-heading">
-  <div><p class="eyebrow">Canonical database</p><h1>Systems explorer</h1><p>{{ systems|length }} matching records. Category filters include primary and secondary classifications.</p></div>
+  <div><p class="eyebrow">Canonical database</p><h1>Systems explorer</h1><p>{{ total }} matching records (page {{ page }} of {{ total_pages }}). Category filters include primary and secondary classifications.</p></div>
   <div><a class="button" href="/export/current.csv">Export CSV</a></div>
 </div>
 
@@ -36,5 +36,16 @@
       </tbody>
     </table>
   </div>
+  {% if total_pages > 1 %}
+  <div class="pagination" style="display:flex;gap:0.5rem;justify-content:center;padding:1rem;align-items:center;">
+    {% if page > 1 %}
+      <a class="button" href="?{{ request.url.query | replace('page=' ~ page, '') }}&page={{ page - 1 }}">Previous</a>
+    {% endif %}
+    <span style="color:#666;">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+      <a class="button" href="?{{ request.url.query | replace('page=' ~ page, '') }}&page={{ page + 1 }}">Next</a>
+    {% endif %}
+  </div>
+  {% endif %}
 </section>
 {% endblock %}

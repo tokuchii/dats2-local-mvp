@@ -27,5 +27,87 @@
 <footer>
   Local, human-reviewed DATS 2.0 registry. Agent assessments are proposals until approved.
 </footer>
+<div class="toast-container" id="toasts"></div>
+<script>
+(function(){
+  var params = new URLSearchParams(window.location.search);
+  var types = ['success','error','info'];
+  var container = document.getElementById('toasts');
+  types.forEach(function(type){
+    var msg = params.get(type);
+    if (!msg) return;
+    var el = document.createElement('div');
+    el.className = 'toast ' + type;
+    var span = document.createElement('span');
+    span.textContent = msg;
+    el.appendChild(span);
+    var close = document.createElement('span');
+    close.className = 'toast-close';
+    close.textContent = '\u00d7';
+    close.onclick = function(){ el.remove(); };
+    el.appendChild(close);
+    container.appendChild(el);
+    setTimeout(function(){ el.remove(); }, 5000);
+  });
+  if (types.some(function(t){ return params.get(t); })) {
+    var url = new URL(window.location);
+    types.forEach(function(t){ url.searchParams.delete(t); });
+    window.history.replaceState({}, '', url);
+  }
+})();
+</script>
+<script>
+(function(){
+  var es = new EventSource('/api/events');
+  var reconnectDelay = 1000;
+  es.onmessage = function(e) {
+    reconnectDelay = 1000;
+    var data = JSON.parse(e.data);
+    var event = data.event;
+    if (event === 'system_approved') {
+      showToast('success', 'System ' + data.dats2_id + ' approved (v' + data.version + ')');
+      refreshIfOn('/systems', '/review', '/');
+    } else if (event === 'candidate_rejected') {
+      showToast('info', 'Candidate #' + data.candidate_id + ' rejected');
+      refreshIfOn('/review', '/');
+    } else if (event === 'candidate_saved') {
+      showToast('info', 'Candidate #' + data.candidate_id + ' updated');
+    } else if (event === 'submission_created') {
+      showToast('success', 'New ' + data.source_type + ' submission queued');
+      refreshIfOn('/review', '/');
+    }
+  };
+  es.onerror = function() {
+    es.close();
+    setTimeout(function() { es = new EventSource('/api/events'); }, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+  };
+  function showToast(type, msg) {
+    var container = document.getElementById('toasts');
+    var el = document.createElement('div');
+    el.className = 'toast ' + type;
+    var span = document.createElement('span');
+    span.textContent = msg;
+    el.appendChild(span);
+    var close = document.createElement('span');
+    close.className = 'toast-close';
+    close.textContent = '\u00d7';
+    close.onclick = function(){ el.remove(); };
+    el.appendChild(close);
+    container.appendChild(el);
+    setTimeout(function(){ el.remove(); }, 5000);
+  }
+  function refreshIfOn() {
+    var paths = Array.prototype.slice.call(arguments);
+    var current = window.location.pathname;
+    for (var i = 0; i < paths.length; i++) {
+      if (current === paths[i] || current === paths[i] + '/') {
+        setTimeout(function(){ window.location.reload(); }, 1500);
+        return;
+      }
+    }
+  }
+})();
+</script>
 </body>
 </html>

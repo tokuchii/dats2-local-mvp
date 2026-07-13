@@ -24,6 +24,7 @@
   <label>Maturity<input name="maturity" value="{{ candidate.payload.maturity or '' }}"></label>
   <label>Operating status<input name="operating_status" value="{{ candidate.payload.operating_status or '' }}"></label>
   <label class="span-all">Evidence of scale<textarea name="evidence_of_scale" rows="3">{{ candidate.payload.evidence_of_scale or '' }}</textarea></label>
+  <label class="span-all">Main scaling strength<textarea name="main_scaling_strength" rows="3">{{ candidate.payload.main_scaling_strength or '' }}</textarea></label>
   <label class="span-all">Primary bottleneck<textarea name="primary_bottleneck" rows="3">{{ candidate.payload.primary_bottleneck or '' }}</textarea></label>
   <label>Interop score<input type="number" min="0" max="4" name="interoperability_score" value="{{ candidate.payload.interoperability_score or 0 }}"></label>
   <label>Overall confidence<input type="number" min="0" max="1" step="0.01" name="overall_confidence" value="{{ candidate.payload.overall_confidence or candidate.confidence }}"></label>
@@ -41,8 +42,8 @@
 </form>
 
 <aside class="stack">
-  <section class="panel"><p class="eyebrow">Possible duplicates</p><h2>Entity resolution</h2>{% if candidate.duplicates %}{% for dup in candidate.duplicates %}<a class="duplicate" href="/systems/{{ dup.dats2_id }}" target="_blank"><strong>{{ dup.dats2_id }} · {{ dup.score }}%</strong><span>{{ dup.name }}</span></a>{% endfor %}{% else %}<div class="empty">No similar record exceeded the threshold.</div>{% endif %}</section>
-  <section class="panel"><p class="eyebrow">Evidence</p><h2>Claim support</h2>{% if candidate.evidence %}{% for ev in candidate.evidence %}<div class="evidence"><strong>{{ ev.claim }}</strong><p>{{ ev.evidence_summary }}</p><small>{{ (ev.confidence * 100)|round|int }}% · {{ ev.evidence_type }}</small>{% if ev.source_url %}<a href="{{ ev.source_url }}" target="_blank">Source ↗</a>{% endif %}</div>{% endfor %}{% else %}<div class="empty">No evidence items extracted.</div>{% endif %}</section>
+  <section class="panel"><p class="eyebrow">Possible duplicates</p><h2>Entity resolution</h2>{% if candidate.duplicates %}{% for dup in candidate.duplicates %}<a class="duplicate" href="/systems/{{ dup.dats2_id }}" target="_blank"><strong>{{ dup.dats2_id }} · {{ dup.score }}% match</strong><span>{{ dup.name }}</span></a>{% endfor %}{% else %}<div class="empty">No similar record exceeded the threshold.</div>{% endif %}</section>
+  <section class="panel"><p class="eyebrow">Evidence</p><h2>Claim support</h2>{% if candidate.evidence %}{% for ev in candidate.evidence %}<div class="evidence"><strong>{{ ev.claim }}</strong><p>{{ ev.evidence_summary }}</p><small>{{ (ev.confidence * 100)|round|int }}% · {{ ev.evidence_type }}</small>{% if ev.source_url %}<a href="{{ ev.source_url|safe_url }}" target="_blank">Source ↗</a>{% endif %}</div>{% endfor %}{% else %}<div class="empty">No evidence items extracted.</div>{% endif %}</section>
 </aside>
 </div>
 

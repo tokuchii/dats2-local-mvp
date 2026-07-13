@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import re
 import socket
 from io import BytesIO
@@ -15,7 +16,9 @@ from pydantic import BaseModel, Field, ValidationError
 from pypdf import PdfReader
 from rapidfuzz import fuzz
 
-from .config import OLLAMA_BASE_URL, OLLAMA_MODEL
+from .config import OLLAMA_BASE_URL, OLLAMA_MODEL, OPENAI_API_KEY, OPENAI_MODEL
+
+log = logging.getLogger(__name__)
 from .db import connect, create_candidate, get_submission, update_submission
 
 
@@ -69,7 +72,6 @@ class Assessment(BaseModel):
     owner_type: str | None = None
     sector_commodity: list[str] = Field(default_factory=list)
     geographic_scope: str | None = None
-    value_chain_stage: list[str] = Field(default_factory=list)
     core_function: str
     technology_channel: list[str] = Field(default_factory=list)
     primary_users: list[str] = Field(default_factory=list)
@@ -179,6 +181,20 @@ def extract_file(path: str) -> dict[str, Any]:
         reader = PdfReader(str(file_path))
         text = "\n".join((page.extract_text() or "") for page in reader.pages)
         return {"url": None, "title": file_path.name, "text": text[:220_000], "links": [], "content_type": "application/pdf"}
+    if suffix in {".xlsx", ".xls"}:
+        from openpyxl import load_workbook
+        wb = load_workbook(str(file_path), read_only=True, data_only=True)
+        lines = []
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            lines.append(f"Sheet: {sheet_name}")
+            for row in ws.iter_rows(values_only=True):
+                row_text = " | ".join(str(v) if v is not None else "" for v in row)
+                if row_text.strip(" |"):
+                    lines.append(row_text)
+        wb.close()
+        text = "\n".join(lines)[:220_000]
+        return {"url": None, "title": file_path.name, "text": text, "links": [], "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
     if suffix in {".txt", ".md", ".csv", ".json"}:
         return {"url": None, "title": file_path.name, "text": file_path.read_text(errors="ignore")[:220_000], "links": [], "content_type": "text/plain"}
     raise ValueError("Unsupported file type")
@@ -383,7 +399,6 @@ def heuristic_assessment(document: dict[str, Any]) -> Assessment:
         owner_type=None,
         sector_commodity=commodity,
         geographic_scope="Philippines / scope requires verification" if any(k in lower for k in ["philippines", "philippine"]) else "Scope requires verification",
-        value_chain_stage=value_chain,
         core_function=(all_sentences[0][:700] if all_sentences else f"Digital agriculture system described as {title}."),
         technology_channel=tech,
         primary_users=users,
@@ -439,22 +454,57 @@ def ollama_assessment(document: dict[str, Any]) -> Assessment | None:
         if not result.source_url:
             result.source_url = document.get("url")
         return result
-    except (httpx.HTTPError, KeyError, ValidationError, json.JSONDecodeError):
+    except (httpx.HTTPError, KeyError, ValidationError, json.JSONDecodeError) as exc:
+        log.warning("Ollama assessment failed, falling back: %s", exc)
+        return None
+
+
+def openai_assessment(document: dict[str, Any]) -> Assessment | None:
+    if not OPENAI_API_KEY:
+        return None
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        user_content = json.dumps({
+            "source_url": document.get("url"),
+            "title": document.get("title"),
+            "technical_links": document.get("links", []),
+            "content": document.get("text", "")[:110_000],
+        }, ensure_ascii=False)
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            temperature=0,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT + "\n\nReturn JSON matching this schema:\n" + json.dumps(Assessment.model_json_schema(), indent=2)},
+                {"role": "user", "content": user_content},
+            ],
+        )
+        raw = response.choices[0].message.content
+        result = Assessment.model_validate_json(raw)
+        if not result.source_url:
+            result.source_url = document.get("url")
+        return result
+    except Exception as exc:
+        log.warning("OpenAI assessment failed, falling back: %s", exc)
         return None
 
 
 def find_duplicates(name: str, acronym: str | None, limit: int = 5) -> list[dict[str, Any]]:
     with connect() as conn:
-        rows = conn.execute("SELECT dats2_id,name,acronym,developer_owner,primary_category FROM systems").fetchall()
+        cur = conn.cursor()
+        cur.execute("SELECT dats2_id, name, acronym, developer_owner, primary_category FROM systems")
+        rows = cur.fetchall()
     results = []
     for row in rows:
-        name_score = fuzz.token_set_ratio(name, row["name"])
-        acronym_score = fuzz.ratio((acronym or "").lower(), (row["acronym"] or "").lower()) if acronym and row["acronym"] else 0
+        dats2_id, sys_name, sys_acronym, developer_owner, primary_category = row
+        name_score = fuzz.token_set_ratio(name, sys_name)
+        acronym_score = fuzz.ratio((acronym or "").lower(), (sys_acronym or "").lower()) if acronym and sys_acronym else 0
         score = max(name_score, acronym_score)
         if score >= 52:
             results.append({
-                "dats2_id": row["dats2_id"], "name": row["name"], "acronym": row["acronym"],
-                "developer_owner": row["developer_owner"], "primary_category": row["primary_category"],
+                "dats2_id": dats2_id, "name": sys_name, "acronym": sys_acronym,
+                "developer_owner": developer_owner, "primary_category": primary_category,
                 "score": round(score, 1),
             })
     return sorted(results, key=lambda item: item["score"], reverse=True)[:limit]
@@ -468,8 +518,15 @@ def process_submission(submission_id: int) -> int:
             raise ValueError("Submission not found")
         document = acquire_submission(submission)
         assessment = ollama_assessment(document)
-        mode = f"Ollama: {OLLAMA_MODEL}" if assessment else "Deterministic fallback"
-        assessment = assessment or heuristic_assessment(document)
+        if assessment:
+            mode = f"Ollama: {OLLAMA_MODEL}"
+        else:
+            assessment = openai_assessment(document)
+            if assessment:
+                mode = f"OpenAI: {OPENAI_MODEL}"
+            else:
+                mode = "Deterministic fallback"
+                assessment = heuristic_assessment(document)
         duplicates = find_duplicates(assessment.system_name, assessment.acronym)
         candidate_id = create_candidate(
             submission_id=submission_id,
