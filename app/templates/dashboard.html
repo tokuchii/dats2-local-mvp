@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — DATS 2.0{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">Philippine Digital Agriculture Observatory</p>
+    <h1>Discover, assess and govern digital agriculture systems.</h1>
+    <p class="lead">A local, agent-assisted dashboard built around the DATS 2.0 master database. New evidence enters a review queue before it can alter the canonical registry.</p>
+  </div>
+  <div class="hero-actions">
+    <a class="button primary" href="/submit">Assess a system</a>
+    <a class="button" href="/systems">Explore database</a>
+  </div>
+</section>
+
+<section class="metrics">
+  <div class="metric"><span>Canonical systems</span><strong>{{ summary.systems }}</strong></div>
+  <div class="metric"><span>Multifunctional</span><strong>{{ summary.multifunctional }}</strong></div>
+  <div class="metric"><span>Awaiting review</span><strong>{{ summary.proposed_candidates }}</strong></div>
+  <div class="metric"><span>Queued/running</span><strong>{{ summary.queued_submissions }}</strong></div>
+</section>
+
+<div class="grid two">
+  <section class="panel">
+    <div class="panel-heading"><div><p class="eyebrow">Coverage</p><h2>Primary categories</h2></div><span class="pill">Distinct counts</span></div>
+    {% set max_cat = summary.categories.values()|max if summary.categories else 1 %}
+    <div class="bar-list">
+      {% for label, count in summary.categories.items() %}
+      <a class="bar-row" href="/systems?category={{ label|urlencode }}">
+        <span class="bar-label">{{ label }}</span>
+        <span class="bar-track"><span class="bar-fill" style="width: {{ (count / max_cat * 100)|round }}%"></span></span>
+        <strong>{{ count }}</strong>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading"><div><p class="eyebrow">Animal sector</p><h2>Livestock and poultry coverage</h2></div></div>
+    {% set max_live = summary.livestock.values()|max if summary.livestock else 1 %}
+    <div class="bar-list">
+      {% for label, count in summary.livestock.items() %}
+      <a class="bar-row" href="/systems?livestock={{ label|urlencode }}">
+        <span class="bar-label">{{ label }}</span>
+        <span class="bar-track"><span class="bar-fill alt" style="width: {{ (count / max_live * 100)|round }}%"></span></span>
+        <strong>{{ count }}</strong>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<div class="grid two">
+  <section class="panel">
+    <div class="panel-heading"><div><p class="eyebrow">Registry</p><h2>Systems explorer</h2></div><a href="/systems">View all</a></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>System</th><th>Primary category</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for item in recent %}
+          <tr>
+            <td><a href="/systems/{{ item.dats2_id }}">{{ item.dats2_id }}</a></td>
+            <td><strong>{{ item.name }}</strong><small>{{ item.developer_owner or '' }}</small></td>
+            <td>{{ item.primary_category }}</td>
+            <td><span class="status">{{ item.operating_status or 'Unspecified' }}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading"><div><p class="eyebrow">Human-in-the-loop</p><h2>Review queue</h2></div><a href="/review">Open queue</a></div>
+    {% if candidates %}
+      <div class="card-list">
+      {% for item in candidates %}
+        <a class="candidate-card" href="/review/{{ item.id }}">
+          <div><strong>{{ item.payload.system_name }}</strong><small>{{ item.assessment_mode }}</small></div>
+          <span class="confidence">{{ (item.confidence * 100)|round|int }}%</span>
+        </a>
+      {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty">No candidate is waiting for review.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

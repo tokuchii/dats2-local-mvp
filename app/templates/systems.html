@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Systems — DATS 2.0{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><p class="eyebrow">Canonical database</p><h1>Systems explorer</h1><p>{{ systems|length }} matching records. Category filters include primary and secondary classifications.</p></div>
+  <div><a class="button" href="/export/current.csv">Export CSV</a></div>
+</div>
+
+<form class="filters panel" method="get">
+  <label>Search<input name="search" value="{{ filters.search }}" placeholder="Name, acronym, owner or function"></label>
+  <label>Functional category<select name="category"><option value="">All categories</option>{% for value in categories %}<option {% if value==filters.category %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+  <label>Status<select name="status"><option value="">All statuses</option>{% for value in statuses %}<option {% if value==filters.status %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+  <label>Commodity/species<select name="commodity"><option value="">All commodities</option>{% for value in commodities %}<option {% if value==filters.commodity %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+  <label>Livestock/poultry<select name="livestock"><option value="">All coverage</option>{% for value in livestock_values %}<option {% if value==filters.livestock %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+  <button class="button primary" type="submit">Apply</button>
+</form>
+
+<section class="panel table-panel">
+  <div class="table-wrap">
+    <table class="wide-table">
+      <thead><tr><th>ID</th><th>System</th><th>Owner</th><th>Functions</th><th>Commodity/species</th><th>Status</th><th>SINAG</th></tr></thead>
+      <tbody>
+      {% for item in systems %}
+        <tr>
+          <td><a href="/systems/{{ item.dats2_id }}">{{ item.dats2_id }}</a></td>
+          <td><a class="system-name" href="/systems/{{ item.dats2_id }}">{{ item.name }}</a><small>{{ item.acronym or '' }}</small></td>
+          <td>{{ item.developer_owner or 'Unspecified' }}</td>
+          <td><span class="tag primary-tag">{{ item.primary_category }}</span>{% for tag in item.secondary_categories[:2] %}<span class="tag">{{ tag }}</span>{% endfor %}{% if item.secondary_categories|length > 2 %}<span class="tag">+{{ item.secondary_categories|length - 2 }}</span>{% endif %}</td>
+          <td>{% for tag in item.commodity_tags[:3] %}<span class="tag soft">{{ tag }}</span>{% endfor %}</td>
+          <td><span class="status">{{ item.operating_status or 'Unspecified' }}</span></td>
+          <td><span class="priority {{ (item.sinag_priority or 'medium')|lower }}">{{ item.sinag_priority or 'Medium' }}</span></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="empty">No matching system.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

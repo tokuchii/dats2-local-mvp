@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Candidate {{ candidate.id }} — DATS 2.0{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Candidate #{{ candidate.id }} · {{ candidate.assessment_mode }}</p><h1>{{ candidate.payload.system_name }}</h1><p>Agent confidence: {{ (candidate.confidence * 100)|round|int }}%. Review every material field before approval.</p></div><span class="status big">{{ candidate.status }}</span></div>
+
+<div class="grid review-grid">
+<form class="panel span-two form-grid" method="post" action="/review/{{ candidate.id }}/save">
+  <div class="panel-heading span-all"><div><p class="eyebrow">Editable proposal</p><h2>DATS 2.0 fields</h2></div><button class="button" type="submit">Save edits</button></div>
+  <label class="span-two">System name<input name="system_name" value="{{ candidate.payload.system_name or '' }}" required></label>
+  <label>Acronym<input name="acronym" value="{{ candidate.payload.acronym or '' }}"></label>
+  <label>Developer/owner<input name="developer_owner" value="{{ candidate.payload.developer_owner or '' }}"></label>
+  <label>Owner type<input name="owner_type" value="{{ candidate.payload.owner_type or '' }}"></label>
+  <label>Geographic scope<input name="geographic_scope" value="{{ candidate.payload.geographic_scope or '' }}"></label>
+  <label>Sector/commodity<input name="sector_commodity" value="{{ candidate.payload.sector_commodity|join('; ') if candidate.payload.sector_commodity is iterable and candidate.payload.sector_commodity is not string else candidate.payload.sector_commodity or '' }}"></label>
+  <label>Primary category<select name="primary_category">{% for value in categories %}<option {% if value==candidate.payload.primary_category %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+  <label class="span-two">Secondary categories<input name="secondary_categories" value="{{ candidate.payload.secondary_categories|join('; ') }}"></label>
+  <label>Commodity/species tags<input name="commodity_species_tags" value="{{ candidate.payload.commodity_species_tags|join('; ') }}"></label>
+  <label>Value-chain tags<input name="value_chain_tags" value="{{ candidate.payload.value_chain_tags|join('; ') }}"></label>
+  <label>Technology tags<input name="technology_tags" value="{{ candidate.payload.technology_tags|join('; ') }}"></label>
+  <label>Technology/channel<input name="technology_channel" value="{{ candidate.payload.technology_channel|join('; ') if candidate.payload.technology_channel is iterable and candidate.payload.technology_channel is not string else candidate.payload.technology_channel or '' }}"></label>
+  <label>Primary users<input name="primary_users" value="{{ candidate.payload.primary_users|join('; ') }}"></label>
+  <label>Livestock/poultry coverage<select name="livestock_poultry_coverage">{% for value in ['Not dedicated','Dedicated — swine/native pig','Dedicated — poultry/chicken/duck','Dedicated — mixed livestock/poultry','Livestock regulatory / animal-health','Livestock — general'] %}<option {% if value==candidate.payload.livestock_poultry_coverage %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+  <label class="span-all">Core function<textarea name="core_function" rows="4">{{ candidate.payload.core_function or '' }}</textarea></label>
+  <label>Maturity<input name="maturity" value="{{ candidate.payload.maturity or '' }}"></label>
+  <label>Operating status<input name="operating_status" value="{{ candidate.payload.operating_status or '' }}"></label>
+  <label class="span-all">Evidence of scale<textarea name="evidence_of_scale" rows="3">{{ candidate.payload.evidence_of_scale or '' }}</textarea></label>
+  <label class="span-all">Primary bottleneck<textarea name="primary_bottleneck" rows="3">{{ candidate.payload.primary_bottleneck or '' }}</textarea></label>
+  <label>Interop score<input type="number" min="0" max="4" name="interoperability_score" value="{{ candidate.payload.interoperability_score or 0 }}"></label>
+  <label>Overall confidence<input type="number" min="0" max="1" step="0.01" name="overall_confidence" value="{{ candidate.payload.overall_confidence or candidate.confidence }}"></label>
+  <label class="span-all">Interoperability reason<textarea name="interoperability_reason" rows="4">{{ candidate.payload.interoperability_reason or '' }}</textarea></label>
+  <label>Public source availability<input name="public_source_availability" value="{{ candidate.payload.public_source_availability or '' }}"></label>
+  <label>Official repository URL<input name="official_repository_url" value="{{ candidate.payload.official_repository_url or '' }}"></label>
+  <label>Public license<input name="public_license" value="{{ candidate.payload.public_license or '' }}"></label>
+  <label>Public API documentation<input name="public_api_documentation" value="{{ candidate.payload.public_api_documentation or '' }}"></label>
+  <label>Machine-readable export<input name="machine_readable_export" value="{{ candidate.payload.machine_readable_export or '' }}"></label>
+  <label>Source URL<input name="source_url" value="{{ candidate.payload.source_url or candidate.source_uri or '' }}"></label>
+  <label>Potential SINAG role<input name="potential_sinag_role" value="{{ candidate.payload.potential_sinag_role or '' }}"></label>
+  <label>SINAG priority<select name="sinag_priority">{% for value in ['High','Medium','Low'] %}<option {% if value==candidate.payload.sinag_priority %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+  <label>Evidence confidence<select name="evidence_confidence">{% for value in ['High','Medium','Low'] %}<option {% if value==candidate.payload.evidence_confidence %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+  <label class="span-all">Recommended SINAG action<textarea name="recommended_sinag_action" rows="3">{{ candidate.payload.recommended_sinag_action or '' }}</textarea></label>
+</form>
+
+<aside class="stack">
+  <section class="panel"><p class="eyebrow">Possible duplicates</p><h2>Entity resolution</h2>{% if candidate.duplicates %}{% for dup in candidate.duplicates %}<a class="duplicate" href="/systems/{{ dup.dats2_id }}" target="_blank"><strong>{{ dup.dats2_id }} · {{ dup.score }}%</strong><span>{{ dup.name }}</span></a>{% endfor %}{% else %}<div class="empty">No similar record exceeded the threshold.</div>{% endif %}</section>
+  <section class="panel"><p class="eyebrow">Evidence</p><h2>Claim support</h2>{% if candidate.evidence %}{% for ev in candidate.evidence %}<div class="evidence"><strong>{{ ev.claim }}</strong><p>{{ ev.evidence_summary }}</p><small>{{ (ev.confidence * 100)|round|int }}% · {{ ev.evidence_type }}</small>{% if ev.source_url %}<a href="{{ ev.source_url }}" target="_blank">Source ↗</a>{% endif %}</div>{% endfor %}{% else %}<div class="empty">No evidence items extracted.</div>{% endif %}</section>
+</aside>
+</div>
+
+<section class="panel decision-panel">
+  <div><p class="eyebrow">Reviewer decision</p><h2>Promote, merge or reject</h2><p>The reviewer token is stored in the local <code>.env</code> file.</p></div>
+  <div class="decision-forms">
+    <form method="post" action="/review/{{ candidate.id }}/approve">
+      <label>Reviewer name<input name="reviewer_name" value="local-reviewer"></label>
+      <label>Reviewer token<input type="password" name="reviewer_token" required></label>
+      <label>Merge into existing DATS2 ID<input name="merge_into" list="systems-list" placeholder="Blank creates a new D2-WEB ID"><datalist id="systems-list">{% for item in systems %}<option value="{{ item.dats2_id }}">{{ item.name }}</option>{% endfor %}</datalist></label>
+      <label>Decision note<textarea name="reviewer_note" rows="3"></textarea></label>
+      <button class="button primary" type="submit">Approve / merge</button>
+    </form>
+    <form method="post" action="/review/{{ candidate.id }}/reject">
+      <label>Reviewer name<input name="reviewer_name" value="local-reviewer"></label>
+      <label>Reviewer token<input type="password" name="reviewer_token" required></label>
+      <label>Rejection note<textarea name="reviewer_note" rows="5" required></textarea></label>
+      <button class="button danger" type="submit">Reject proposal</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Submit — DATS 2.0{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Agent-assisted intake</p><h1>Submit a digital agriculture system</h1><p>The agent extracts and proposes fields. Nothing enters the canonical database until a reviewer approves or merges it.</p></div></div>
+
+<div class="grid three submit-grid">
+  <form class="panel form-panel" method="post" action="/submit/url">
+    <span class="step">1</span><h2>Paste a public link</h2><p>Official page, app listing, repository, paper, PDF or project page.</p>
+    <label>URL<input type="url" name="url" required placeholder="https://..."></label>
+    <label>Submitted by<input name="submitted_by" placeholder="Name or organization"></label>
+    <button class="button primary" type="submit">Acquire and assess</button>
+  </form>
+
+  <form class="panel form-panel" method="post" action="/submit/text">
+    <span class="step">2</span><h2>Paste evidence text</h2><p>Useful for an internal description, email, abstract or unpublished prototype.</p>
+    <label>Description<textarea name="text" required rows="10" placeholder="System name, developer, users, functions, current status, scale, APIs, exports..."></textarea></label>
+    <label>Optional source URL<input type="url" name="source_url" placeholder="https://..."></label>
+    <label>Submitted by<input name="submitted_by" placeholder="Name or organization"></label>
+    <button class="button primary" type="submit">Assess text</button>
+  </form>
+
+  <form class="panel form-panel" method="post" action="/submit/file" enctype="multipart/form-data">
+    <span class="step">3</span><h2>Upload a document</h2><p>PDF, TXT, Markdown, CSV or JSON. Maximum file size is configured locally.</p>
+    <label>File<input type="file" name="file" required accept=".pdf,.txt,.md,.csv,.json"></label>
+    <label>Submitted by<input name="submitted_by" placeholder="Name or organization"></label>
+    <button class="button primary" type="submit">Upload and assess</button>
+  </form>
+</div>
+
+<section class="panel workflow">
+  <div><span>Acquire</span><small>Download or parse evidence</small></div><b>→</b>
+  <div><span>Extract</span><small>Structured DATS fields</small></div><b>→</b>
+  <div><span>Classify</span><small>Multi-label functions and tags</small></div><b>→</b>
+  <div><span>Compare</span><small>Duplicate/entity resolution</small></div><b>→</b>
+  <div><span>Review</span><small>Approve, edit, merge or reject</small></div>
+</section>
+{% endblock %}

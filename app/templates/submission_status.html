@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Submission {{ submission.id }} — DATS 2.0{% endblock %}
+{% block head %}{% if submission.status in ['queued','running'] %}<meta http-equiv="refresh" content="2">{% endif %}{% endblock %}
+{% block content %}
+<section class="status-page panel">
+  <p class="eyebrow">Submission #{{ submission.id }}</p>
+  <h1>{{ submission.status|replace('_',' ')|title }}</h1>
+  <p>{{ submission.source_uri or 'Pasted text submission' }}</p>
+  <div class="progress"><span class="{{ submission.status }}"></span></div>
+  {% if submission.status in ['queued','running'] %}<p>The acquisition, assessment and duplicate-check workflow is running. This page refreshes automatically.</p>{% elif candidate_id %}<a class="button primary" href="/review/{{ candidate_id }}">Review candidate</a>{% elif submission.error_message %}<div class="error-box">{{ submission.error_message }}</div>{% else %}<a class="button" href="/review">Open review queue</a>{% endif %}
+</section>
+{% endblock %}
