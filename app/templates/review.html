@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Review queue — DATS 2.0{% endblock %}
 {% block content %}
-<div class="page-heading"><div><p class="eyebrow">Human approval gate</p><h1>Review queue</h1><p>Edit evidence-based proposals, compare possible duplicates and approve, merge or reject.</p></div><div class="tabs"><a class="{% if status=='proposed' %}active{% endif %}" href="/review?status=proposed">Proposed</a><a class="{% if status=='approved' %}active{% endif %}" href="/review?status=approved">Approved</a><a class="{% if status=='rejected' %}active{% endif %}" href="/review?status=rejected">Rejected</a></div></div>
+<div class="page-heading"><div><p class="eyebrow">Human approval gate</p><h1>Review queue</h1><p>Edit evidence-based proposals, compare possible duplicates and approve, merge or reject.</p></div><div class="tabs"><a class="{% if status=='proposed' %}active{% endif %}" href="/review?status=proposed">Proposed{% if counts.proposed %} <span class="badge">{{ counts.proposed }}</span>{% endif %}</a><a class="{% if status=='approved' %}active{% endif %}" href="/review?status=approved">Approved</a><a class="{% if status=='rejected' %}active{% endif %}" href="/review?status=rejected">Rejected</a></div></div>
 <section class="panel">
   {% if candidates %}<div class="review-list">
   {% for item in candidates %}

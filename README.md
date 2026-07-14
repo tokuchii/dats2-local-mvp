@@ -9,7 +9,7 @@ The application starts with the bundled 133-system master database and supports:
 - commodity/species, value-chain, technology, and livestock/poultry filters;
 - URL, pasted-text, and document submission;
 - automatic evidence extraction and structured DATS assessment;
-- optional local Ollama assessment with deterministic fallback;
+- optional AI-powered assessment via OpenAI GPT-4o with deterministic fallback;
 - duplicate/entity-resolution suggestions;
 - editable reviewer queue;
 - approve as a new system or merge into an existing DATS2 ID;
@@ -61,21 +61,15 @@ REVIEWER_TOKEN=replace-with-a-long-local-secret
 
 The token is required only for **approve/merge/reject** actions. Public exploration and submissions do not require it in this local MVP.
 
-## Optional local AI with Ollama
+## AI-powered assessment with OpenAI GPT-4o
 
-The application works without an LLM. Its deterministic fallback extracts categories, tags, maturity signals, technical links, interoperability evidence, and duplicate matches.
+The application works without an API key. Its deterministic fallback extracts categories, tags, maturity signals, technical links, interoperability evidence, and duplicate matches.
 
-For stronger structured extraction, install Ollama and pull a small model, for example:
-
-```bash
-ollama pull gemma3:4b
-```
-
-Then edit `.env`:
+For stronger structured extraction, set your OpenAI API key in `.env`:
 
 ```env
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=gemma3:4b
+OPENAI_API_KEY=sk-your-key-here
+OPENAI_MODEL=gpt-4o
 ```
 
 Restart the dashboard. Candidate records will show the assessment mode used.
@@ -123,7 +117,7 @@ The agent never directly changes a canonical system record.
 | Web acquisition | HTTPX + BeautifulSoup |
 | PDF extraction | pypdf |
 | Duplicate matching | RapidFuzz |
-| Optional local model | Ollama structured JSON output |
+| LLM assessment | OpenAI GPT-4o (API key required) |
 | Server | Uvicorn |
 
 There is no Node.js, Docker, Redis, Celery, or cloud service requirement for the local MVP.

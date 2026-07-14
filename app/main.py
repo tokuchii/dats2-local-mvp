@@ -247,7 +247,8 @@ def submission_status(request: Request, submission_id: int):
 @app.get("/review", response_class=HTMLResponse)
 def review_queue(request: Request, status: str = "proposed"):
     candidates = list_candidates(status)
-    return templates.TemplateResponse(request, "review.html", context(request, candidates=candidates, status=status))
+    counts = {s: count_candidates(s) for s in ("proposed", "approved", "rejected")}
+    return templates.TemplateResponse(request, "review.html", context(request, candidates=candidates, status=status, counts=counts))
 
 
 @app.get("/review/{candidate_id}", response_class=HTMLResponse)

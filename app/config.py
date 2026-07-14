@@ -27,8 +27,7 @@ MASTER_XLSX = DATA_DIR / "DATS_2.0_Philippines_Master_2026.xlsx"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "").strip()
+
 REVIEWER_TOKEN = os.getenv("REVIEWER_TOKEN", "").strip()
 if not REVIEWER_TOKEN:
     raise RuntimeError("REVIEWER_TOKEN must be set in .env — refusing to start with an empty token")
@@ -37,6 +36,5 @@ try:
 except ValueError:
     MAX_UPLOAD_MB = 25
 
-# OpenAI configuration (production-ready alternative to Ollama)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o").strip()
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4-mini").strip()

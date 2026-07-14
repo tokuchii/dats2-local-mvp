@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 from pypdf import PdfReader
 from rapidfuzz import fuzz
 
-from .config import OLLAMA_BASE_URL, OLLAMA_MODEL, OPENAI_API_KEY, OPENAI_MODEL
+from .config import OPENAI_API_KEY, OPENAI_MODEL
 
 log = logging.getLogger(__name__)
 from .db import connect, create_candidate, get_submission, update_submission
@@ -430,35 +430,6 @@ def heuristic_assessment(document: dict[str, Any]) -> Assessment:
     )
 
 
-def ollama_assessment(document: dict[str, Any]) -> Assessment | None:
-    if not OLLAMA_MODEL:
-        return None
-    request = {
-        "model": OLLAMA_MODEL,
-        "system": SYSTEM_PROMPT,
-        "prompt": json.dumps({
-            "source_url": document.get("url"),
-            "title": document.get("title"),
-            "technical_links": document.get("links", []),
-            "content": document.get("text", "")[:110_000],
-        }, ensure_ascii=False),
-        "format": Assessment.model_json_schema(),
-        "stream": False,
-        "options": {"temperature": 0},
-    }
-    try:
-        response = httpx.post(f"{OLLAMA_BASE_URL}/api/generate", json=request, timeout=300)
-        response.raise_for_status()
-        body = response.json()
-        result = Assessment.model_validate_json(body["response"])
-        if not result.source_url:
-            result.source_url = document.get("url")
-        return result
-    except (httpx.HTTPError, KeyError, ValidationError, json.JSONDecodeError) as exc:
-        log.warning("Ollama assessment failed, falling back: %s", exc)
-        return None
-
-
 def openai_assessment(document: dict[str, Any]) -> Assessment | None:
     if not OPENAI_API_KEY:
         return None
@@ -517,16 +488,12 @@ def process_submission(submission_id: int) -> int:
         if not submission:
             raise ValueError("Submission not found")
         document = acquire_submission(submission)
-        assessment = ollama_assessment(document)
+        assessment = openai_assessment(document)
         if assessment:
-            mode = f"Ollama: {OLLAMA_MODEL}"
+            mode = f"OpenAI: {OPENAI_MODEL}"
         else:
-            assessment = openai_assessment(document)
-            if assessment:
-                mode = f"OpenAI: {OPENAI_MODEL}"
-            else:
-                mode = "Deterministic fallback"
-                assessment = heuristic_assessment(document)
+            mode = "Deterministic fallback"
+            assessment = heuristic_assessment(document)
         duplicates = find_duplicates(assessment.system_name, assessment.acronym)
         candidate_id = create_candidate(
             submission_id=submission_id,
