@@ -78,7 +78,7 @@ templates.env.filters["safe_url"] = _safe_url
 
 
 def context(request: Request, **kwargs):
-    return {"request": request, "categories": DATS_CATEGORIES, **kwargs}
+    return {"request": request, "categories": DATS_CATEGORIES, "proposed_count": count_candidates("proposed"), **kwargs}
 
 
 def split_form_tags(value: str | None) -> list[str]:
@@ -176,6 +176,7 @@ def submit_url(
     submission_id = create_submission("url", source_uri=url.strip(), submitted_by=submitted_by.strip() or None)
     background_tasks.add_task(process_submission, submission_id)
     publish("submission_created", {"submission_id": submission_id, "source_type": "url"})
+    publish("proposed_count_changed", {"count": count_candidates("proposed")})
     return RedirectResponse(f"/submissions/{submission_id}?success=URL+submitted+for+assessment", status_code=303)
 
 
@@ -198,6 +199,7 @@ def submit_text(
     )
     background_tasks.add_task(process_submission, submission_id)
     publish("submission_created", {"submission_id": submission_id, "source_type": "text"})
+    publish("proposed_count_changed", {"count": count_candidates("proposed")})
     return RedirectResponse(f"/submissions/{submission_id}?success=Text+submitted+for+assessment", status_code=303)
 
 
@@ -227,6 +229,7 @@ def submit_file(
     )
     background_tasks.add_task(process_submission, submission_id)
     publish("submission_created", {"submission_id": submission_id, "source_type": "file"})
+    publish("proposed_count_changed", {"count": count_candidates("proposed")})
     return RedirectResponse(f"/submissions/{submission_id}?success=File+uploaded+for+assessment", status_code=303)
 
 
@@ -355,6 +358,7 @@ def approve(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     publish("system_approved", {"dats2_id": result["dats2_id"], "version": result["version"]})
+    publish("proposed_count_changed", {"count": count_candidates("proposed")})
     return RedirectResponse(f"/systems/{result['dats2_id']}?success=System+approved+successfully", status_code=303)
 
 
@@ -371,6 +375,7 @@ def reject(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     publish("candidate_rejected", {"candidate_id": candidate_id})
+    publish("proposed_count_changed", {"count": count_candidates("proposed")})
     return RedirectResponse("/review?success=Candidate+rejected", status_code=303)
 
 
@@ -422,3 +427,8 @@ def api_system(request: Request, dats2_id: str):
 def api_candidates(request: Request, status: str = "proposed"):
     ensure_api_auth(request)
     return list_candidates(status)
+
+
+@app.get("/api/proposed-count")
+def api_proposed_count():
+    return {"count": count_candidates("proposed")}

@@ -15,7 +15,7 @@
     <a href="/">Dashboard</a>
     <a href="/systems">Systems</a>
     <a href="/submit">Submit</a>
-    <a href="/review">Review</a>
+    <a href="/review">Review<span class="badge nav-badge" id="nav-proposed-badge" style="{% if not proposed_count %}display:none{% endif %}">{{ proposed_count }}</span></a>
     <a href="/audit">Audit</a>
   </nav>
   <div class="top-actions">
@@ -77,6 +77,14 @@
     } else if (event === 'submission_created') {
       showToast('success', 'New ' + data.source_type + ' submission queued');
       refreshIfOn('/review', '/');
+    } else if (event === 'proposed_count_changed') {
+      var badge = document.getElementById('nav-proposed-badge');
+      if (badge) {
+        var count = data.count || 0;
+        badge.textContent = count;
+        badge.style.display = count > 0 ? '' : 'none';
+      }
+      refreshIfOn('/');
     }
   };
   es.onerror = function() {
