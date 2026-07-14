@@ -67,15 +67,15 @@
     var data = JSON.parse(e.data);
     var event = data.event;
     if (event === 'system_approved') {
-      showToast('success', 'System ' + data.dats2_id + ' approved (v' + data.version + ')');
+      window.showToast('success', 'System ' + data.dats2_id + ' approved (v' + data.version + ')');
       refreshIfOn('/systems', '/review', '/');
     } else if (event === 'candidate_rejected') {
-      showToast('info', 'Candidate #' + data.candidate_id + ' rejected');
+      window.showToast('info', 'Candidate #' + data.candidate_id + ' rejected');
       refreshIfOn('/review', '/');
     } else if (event === 'candidate_saved') {
-      showToast('info', 'Candidate #' + data.candidate_id + ' updated');
+      window.showToast('info', 'Candidate #' + data.candidate_id + ' updated');
     } else if (event === 'submission_created') {
-      showToast('success', 'New ' + data.source_type + ' submission queued');
+      window.showToast('success', 'New ' + data.source_type + ' submission queued');
       refreshIfOn('/review', '/');
     } else if (event === 'proposed_count_changed') {
       var badge = document.getElementById('nav-proposed-badge');
@@ -99,7 +99,7 @@
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'hidden') closeSSE();
   });
-  function showToast(type, msg) {
+  window.showToast = function(type, msg) {
     var container = document.getElementById('toasts');
     var el = document.createElement('div');
     el.className = 'toast ' + type;

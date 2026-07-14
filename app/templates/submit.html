@@ -4,14 +4,14 @@
 <div class="page-heading"><div><p class="eyebrow">Agent-assisted intake</p><h1>Submit a digital agriculture system</h1><p>The agent extracts and proposes fields. Nothing enters the canonical database until a reviewer approves or merges it.</p></div></div>
 
 <div class="grid three submit-grid">
-  <form class="panel form-panel" method="post" action="/submit/url">
+  <form class="panel form-panel" method="post" action="/submit/url" data-submit>
     <span class="step">1</span><h2>Paste a public link</h2><p>Official page, app listing, repository, paper, PDF or project page.</p>
     <label>URL<input type="url" name="url" required placeholder="https://..."></label>
     <label>Submitted by<input name="submitted_by" placeholder="Name or organization"></label>
     <button class="button primary" type="submit">Acquire and assess</button>
   </form>
 
-  <form class="panel form-panel" method="post" action="/submit/text">
+  <form class="panel form-panel" method="post" action="/submit/text" data-submit>
     <span class="step">2</span><h2>Paste evidence text</h2><p>Useful for an internal description, email, abstract or unpublished prototype.</p>
     <label>Description<textarea name="text" required rows="10" placeholder="System name, developer, users, functions, current status, scale, APIs, exports..."></textarea></label>
     <label>Optional source URL<input type="url" name="source_url" placeholder="https://..."></label>
@@ -19,13 +19,42 @@
     <button class="button primary" type="submit">Assess text</button>
   </form>
 
-  <form class="panel form-panel" method="post" action="/submit/file" enctype="multipart/form-data">
+  <form class="panel form-panel" method="post" action="/submit/file" data-submit enctype="multipart/form-data">
     <span class="step">3</span><h2>Upload a document</h2><p>PDF, Excel, CSV, TXT, Markdown or JSON. Maximum file size is configured locally.</p>
     <label>File<input type="file" name="file" required accept=".pdf,.txt,.md,.csv,.json,.xlsx,.xls"></label>
     <label>Submitted by<input name="submitted_by" placeholder="Name or organization"></label>
     <button class="button primary" type="submit">Upload and assess</button>
   </form>
 </div>
+
+<script>
+(function(){
+  var btnText = { 'Acquire and assess': 'Acquiring...', 'Assess text': 'Submitting...', 'Upload and assess': 'Uploading...' };
+  document.querySelectorAll('[data-submit]').forEach(function(form){
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var btn = form.querySelector('button[type=submit]');
+      var orig = btn.textContent;
+      btn.textContent = btnText[orig] || 'Submitting...';
+      btn.disabled = true;
+      btn.classList.add('loading');
+      var fd = new FormData(form);
+      fetch(form.action, { method: 'POST', body: fd })
+        .then(function(r){
+          if (r.redirected) { window.location.href = r.url; return; }
+          if (r.ok) { window.location.reload(); return; }
+          return r.json().then(function(d){ throw new Error(d.detail || 'Submission failed'); });
+        })
+        .catch(function(err){
+          showToast('error', err.message || 'Submission failed');
+          btn.textContent = orig;
+          btn.disabled = false;
+          btn.classList.remove('loading');
+        });
+    });
+  });
+})();
+</script>
 
 <section class="panel workflow">
   <div><span>Acquire</span><small>Download or parse evidence</small></div><b>→</b>

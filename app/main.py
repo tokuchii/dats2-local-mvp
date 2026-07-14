@@ -107,6 +107,11 @@ def health() -> dict:
     return {"status": "ok", "version": "1.0.0"}
 
 
+@app.get("/favicon.ico")
+def favicon():
+    return RedirectResponse("/static/favicon.svg", status_code=301)
+
+
 @app.get("/api/events")
 async def sse_events():
     return StreamingResponse(subscribe(), media_type="text/event-stream")

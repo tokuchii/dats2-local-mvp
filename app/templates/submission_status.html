@@ -3,13 +3,13 @@
 {% block content %}
 <section class="status-page panel">
   <p class="eyebrow">Submission #{{ submission.id }}</p>
-  <h1 id="sub-status">{{ submission.status|replace('_',' ')|title }}</h1>
+  <h1 id="sub-status">{{ {'queued':'Queuing','running':'Submitting'}.get(submission.status, submission.status|replace('_',' ')|title) }}</h1>
   <p>{{ submission.source_uri or 'Pasted text submission' }}</p>
   <div class="progress"><span id="sub-progress" class="{{ submission.status }}"></span></div>
   <div id="sub-action">
-    {% if submission.status in ['queued','running'] %}<p>The acquisition, assessment and duplicate-check workflow is running. This page updates automatically.</p>
+    {% if submission.status in ['queued','running'] %}<p>The acquisition, assessment and duplicate-check workflow is submitting. This page updates automatically.</p>
     {% elif candidate_id %}<a class="button primary" href="/review/{{ candidate_id }}">Review candidate</a>
-    {% elif submission.error_message %}<div class="error-box">{{ submission.error_message }}</div>
+    {% elif submission.error_message %}<script>document.addEventListener('DOMContentLoaded',function(){showToast('error',{{ submission.error_message | tojson }});});</script>
     {% else %}<a class="button" href="/review">Open review queue</a>{% endif %}
   </div>
 </section>
@@ -25,12 +25,13 @@
     var h1 = document.getElementById('sub-status');
     var bar = document.getElementById('sub-progress');
     var action = document.getElementById('sub-action');
-    h1.textContent = currentStatus.replace(/_/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+    var labels = {queued:'Queuing',running:'Submitting'};
+    h1.textContent = labels[currentStatus] || currentStatus.replace(/_/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
     bar.className = currentStatus;
     if (currentStatus === 'needs_review' && data.candidate_id) {
       action.innerHTML = '<a class="button primary" href="/review/' + data.candidate_id + '">Review candidate</a>';
     } else if (currentStatus === 'failed') {
-      action.innerHTML = '<div class="error-box">' + (data.error_message || 'Processing failed') + '</div>';
+      showToast('error', data.error_message || 'Processing failed');
     }
   };
   window.addEventListener('pagehide', function(){ es.close(); });

@@ -7,4 +7,5 @@
 .toast.success{background:#059669}.toast.error{background:var(--danger)}.toast.info{background:var(--blue)}
 .toast-close{cursor:pointer;margin-left:auto;opacity:.8;font-size:18px}.toast-close:hover{opacity:1}
 @keyframes toast-in{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+.button.loading{opacity:.65;cursor:not-allowed;pointer-events:none}
 .topbar nav .badge{display:inline-flex;align-items:center;justify-content:center;background:var(--teal);color:#fff;font-size:11px;font-weight:700;min-width:18px;height:18px;padding:0 7px;border-radius:9px;margin-left:6px}
