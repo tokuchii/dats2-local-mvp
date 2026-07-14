@@ -14,6 +14,7 @@ import psycopg2.pool
 from openpyxl import Workbook, load_workbook
 
 from .config import DATABASE_URL, MASTER_XLSX
+from .sse import publish
 
 log = logging.getLogger(__name__)
 
@@ -432,6 +433,7 @@ def update_submission(submission_id: int, *, status: str, error_message: str | N
             "UPDATE submissions SET status=%s, error_message=%s, updated_at=%s WHERE id=%s",
             (status, error_message, now_iso(), submission_id),
         )
+    publish("submission_status_changed", {"submission_id": submission_id, "status": status, "error_message": error_message})
 
 
 def create_candidate(submission_id: int, payload: dict[str, Any], evidence: list[dict[str, Any]], duplicates: list[dict[str, Any]], confidence: float, assessment_mode: str) -> int:
@@ -447,7 +449,8 @@ def create_candidate(submission_id: int, payload: dict[str, Any], evidence: list
         )
         candidate_id = cur.fetchone()[0]
         cur.execute("UPDATE submissions SET status='needs_review', updated_at=%s WHERE id=%s", (timestamp, submission_id))
-        return candidate_id
+    publish("submission_status_changed", {"submission_id": submission_id, "status": "needs_review", "candidate_id": candidate_id})
+    return candidate_id
 
 
 def count_candidates(status: str = "proposed") -> int:

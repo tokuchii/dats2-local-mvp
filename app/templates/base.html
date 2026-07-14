@@ -124,6 +124,13 @@
       }
     }
   }
+  setInterval(syncBadge, 3000);
+  function syncBadge() {
+    fetch('/api/proposed-count').then(function(r){return r.json()}).then(function(d){
+      var badge = document.getElementById('nav-proposed-badge');
+      if(badge){ badge.textContent=d.count; badge.style.display=d.count>0?'':'none'; }
+    })["catch"](function(){});
+  }
 })();
 </script>
 </body>
