@@ -7,9 +7,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_dotenv() -> None:
-    # In production (Railway, etc.) env vars are injected by the platform.
-    # Skip .env file to avoid overriding them with local defaults.
-    if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("DATABASE_URL"):
+    # Skip .env in production platforms (Railway) that inject env vars directly.
+    _is_platform = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("PORT")
+    if _is_platform:
+        import logging
+        logging.getLogger("dats2.config").info(
+            "Platform detected — skipping .env file. DATABASE_URL=%s",
+            os.getenv("DATABASE_URL", "(not set)"),
+        )
         return
     env_path = ROOT / ".env"
     if not env_path.exists():
