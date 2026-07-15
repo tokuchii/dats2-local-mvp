@@ -92,6 +92,23 @@ def _safe_url(value: str | None) -> str:
 templates.env.filters["safe_url"] = _safe_url
 
 
+def _fmt_time(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        from datetime import datetime, timezone
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        local = dt.astimezone()
+        return local.strftime("%b %d, %Y %I:%M %p")
+    except (ValueError, TypeError):
+        return value
+
+
+templates.env.filters["fmt_time"] = _fmt_time
+
+
 def context(request: Request, **kwargs):
     return {"request": request, "categories": DATS_CATEGORIES, "proposed_count": count_candidates("proposed"), **kwargs}
 
