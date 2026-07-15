@@ -141,7 +141,7 @@ def validate_public_url(url: str) -> None:
 def fetch_url(url: str) -> dict[str, Any]:
     validate_public_url(url)
     headers = {"User-Agent": "DATS2Local/1.0 (+human-reviewed digital agriculture registry)"}
-    with httpx.Client(follow_redirects=True, timeout=35, headers=headers) as client:
+    with httpx.Client(follow_redirects=True, timeout=20, headers=headers) as client:
         response = client.get(url)
         response.raise_for_status()
         if int(response.headers.get("content-length", "0") or 0) > 12_000_000:
@@ -435,12 +435,12 @@ def openai_assessment(document: dict[str, Any]) -> Assessment | None:
         return None
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=OPENAI_API_KEY)
+        client = OpenAI(api_key=OPENAI_API_KEY, timeout=60)
         user_content = json.dumps({
             "source_url": document.get("url"),
             "title": document.get("title"),
             "technical_links": document.get("links", []),
-            "content": document.get("text", "")[:110_000],
+            "content": document.get("text", "")[:30_000],
         }, ensure_ascii=False)
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
