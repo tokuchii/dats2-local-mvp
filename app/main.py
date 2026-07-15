@@ -129,7 +129,15 @@ def favicon():
 
 @app.get("/api/events")
 async def sse_events():
-    return StreamingResponse(subscribe(), media_type="text/event-stream")
+    return StreamingResponse(
+        subscribe(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
