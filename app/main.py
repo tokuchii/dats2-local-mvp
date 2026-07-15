@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -55,6 +56,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="DATS 2.0 Local Agentic Dashboard", version="1.0.0", lifespan=lifespan)
+
+# Trust proxy headers (X-Forwarded-Proto) so url_for() generates HTTPS URLs
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
 
 class StaticCacheMiddleware(BaseHTTPMiddleware):
