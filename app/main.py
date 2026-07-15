@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
@@ -43,7 +44,13 @@ from .db import (
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    init_db()
+    log.info("Starting DATS 2.0 — DATABASE_URL=%s", os.getenv("DATABASE_URL", "(not set)"))
+    try:
+        init_db()
+        log.info("Database initialized successfully")
+    except Exception:
+        log.exception("Database initialization failed")
+        raise
     yield
 
 

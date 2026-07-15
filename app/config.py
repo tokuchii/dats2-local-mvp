@@ -39,7 +39,10 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 REVIEWER_TOKEN = os.getenv("REVIEWER_TOKEN", "").strip()
 if not REVIEWER_TOKEN:
-    raise RuntimeError("REVIEWER_TOKEN must be set in .env — refusing to start with an empty token")
+    import logging
+    logging.getLogger("dats2.config").warning(
+        "REVIEWER_TOKEN not set — review/approve actions will be disabled"
+    )
 try:
     MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))
 except ValueError:
