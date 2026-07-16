@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import logging
+import secrets
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -127,6 +128,7 @@ CREATE TABLE IF NOT EXISTS candidates (
     duplicates_json JSONB NOT NULL DEFAULT '[]',
     confidence      DOUBLE PRECISION NOT NULL DEFAULT 0,
     reviewer_note   TEXT,
+    review_token    TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     reviewed_at     TIMESTAMPTZ
 );
@@ -198,10 +200,25 @@ def init_db() -> None:
     with connect() as conn:
         with conn.cursor() as cur:
             cur.execute(SCHEMA_SQL)
+            cur.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS review_token TEXT")
             cur.execute("SELECT COUNT(*) FROM systems")
             count = cur.fetchone()[0]
     if count == 0 and MASTER_XLSX.exists():
         import_master_workbook(MASTER_XLSX)
+
+
+def set_review_token(candidate_id: int, token: str) -> None:
+    with connect() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE candidates SET review_token=%s WHERE id=%s", (token, candidate_id))
+
+
+def get_review_token(candidate_id: int) -> str | None:
+    with connect() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT review_token FROM candidates WHERE id=%s", (candidate_id,))
+        row = cur.fetchone()
+    return row[0] if row else None
 
 
 def import_master_workbook(path: Path) -> int:

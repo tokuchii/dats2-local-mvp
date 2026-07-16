@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
@@ -32,6 +33,7 @@ from .db import (
     get_candidate,
     get_filter_values,
     get_submission,
+    get_review_token,
     get_summary,
     get_system,
     init_db,
@@ -40,6 +42,7 @@ from .db import (
     list_systems,
     reject_candidate,
     save_candidate_payload,
+    set_review_token,
 )
 
 @asynccontextmanager
@@ -310,7 +313,9 @@ def review_candidate(request: Request, candidate_id: int):
     if not candidate:
         raise HTTPException(404, "Candidate not found")
     systems = list_systems(limit=5000)
-    return templates.TemplateResponse(request, "candidate_detail.html", context(request, candidate=candidate, systems=systems))
+    review_token = secrets.token_hex(24)
+    set_review_token(candidate_id, review_token)
+    return templates.TemplateResponse(request, "candidate_detail.html", context(request, candidate=candidate, systems=systems, review_token=review_token))
 
 
 @app.post("/review/{candidate_id}/save")
@@ -402,7 +407,9 @@ def approve(
     reviewer_note: str = Form(""),
     merge_into: str = Form(""),
 ):
-    ensure_reviewer(reviewer_token)
+    stored_token = get_review_token(candidate_id)
+    if not stored_token or not hmac.compare_digest(reviewer_token, stored_token):
+        raise HTTPException(status_code=401, detail="Invalid reviewer token")
     try:
         result = approve_candidate(candidate_id, reviewer_name.strip() or "local-reviewer", reviewer_note.strip() or None, merge_into.strip() or None)
     except ValueError as exc:
@@ -419,7 +426,9 @@ def reject(
     reviewer_name: str = Form("local-reviewer"),
     reviewer_note: str = Form(""),
 ):
-    ensure_reviewer(reviewer_token)
+    stored_token = get_review_token(candidate_id)
+    if not stored_token or not hmac.compare_digest(reviewer_token, stored_token):
+        raise HTTPException(status_code=401, detail="Invalid reviewer token")
     try:
         reject_candidate(candidate_id, reviewer_name.strip() or "local-reviewer", reviewer_note.strip() or None)
     except ValueError as exc:

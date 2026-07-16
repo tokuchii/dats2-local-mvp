@@ -49,4 +49,4 @@ except ValueError:
     MAX_UPLOAD_MB = 25
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4-mini").strip()
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-2024-11-20").strip()
