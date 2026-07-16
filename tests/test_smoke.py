@@ -50,3 +50,43 @@ def test_pasted_text_assessment_and_review():
         detail = client.get(f"/review/{candidate['id']}")
         assert detail.status_code == 200
         assert "Possible duplicates" in detail.text
+
+
+def test_reviewer_token_autofilled_and_auth():
+    token = os.environ.get("REVIEWER_TOKEN", "change-this-local-reviewer-token")
+    with connect() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM system_versions WHERE candidate_id IS NOT NULL")
+        cur.execute("DELETE FROM candidates")
+        cur.execute("DELETE FROM submissions")
+    text = "FarmTracker is a Philippine mobile app for crop monitoring by Test University."
+    with TestClient(app) as client:
+        # Submit a candidate
+        client.post("/submit/text", data={"text": text, "source_url": "", "submitted_by": "Test"}, follow_redirects=True)
+        candidates = client.get("/api/candidates", params={"token": token}).json()
+        assert candidates, "No candidates after submission"
+        cid = candidates[0]["id"]
+
+        # Detail page should have the token pre-filled and readonly
+        detail = client.get(f"/review/{cid}")
+        assert detail.status_code == 200
+        assert f'value="{token}"' in detail.text
+        assert "readonly" in detail.text
+
+        # Approve with correct token should succeed (303 redirect)
+        resp = client.post(f"/review/{cid}/approve", data={"reviewer_token": token, "reviewer_name": "test"}, follow_redirects=False)
+        assert resp.status_code == 303
+
+        # Submit another candidate to test reject
+        client.post("/submit/text", data={"text": text + " v2", "source_url": "", "submitted_by": "Test"}, follow_redirects=True)
+        candidates2 = client.get("/api/candidates", params={"token": token}).json()
+        assert candidates2
+        cid2 = candidates2[0]["id"]
+
+        # Reject with wrong token should fail
+        resp_bad = client.post(f"/review/{cid2}/reject", data={"reviewer_token": "wrong-token", "reviewer_name": "test", "reviewer_note": "nope"}, follow_redirects=False)
+        assert resp_bad.status_code == 401
+
+        # Reject with correct token should succeed
+        resp_ok = client.post(f"/review/{cid2}/reject", data={"reviewer_token": token, "reviewer_name": "test", "reviewer_note": "rejected"}, follow_redirects=False)
+        assert resp_ok.status_code == 303

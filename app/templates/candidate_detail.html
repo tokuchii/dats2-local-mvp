@@ -51,15 +51,15 @@
   <div><p class="eyebrow">Reviewer decision</p><h2>Promote, merge or reject</h2></div>
   <div class="decision-forms">
     <form method="post" action="/review/{{ candidate.id }}/approve">
-      <input type="hidden" name="reviewer_token" value="{{ reviewer_token }}">
       <label>Reviewer name<input name="reviewer_name" value="local-reviewer"></label>
+      <label>Reviewer token<input type="text" name="reviewer_token" value="{{ reviewer_token }}" readonly></label>
       <label>Merge into existing DATS2 ID<input name="merge_into" list="systems-list" placeholder="Blank creates a new D2-WEB ID"><datalist id="systems-list">{% for item in systems %}<option value="{{ item.dats2_id }}">{{ item.name }}</option>{% endfor %}</datalist></label>
       <label>Decision note<textarea name="reviewer_note" rows="3"></textarea></label>
       <button class="button primary" type="submit">Approve / merge</button>
     </form>
     <form method="post" action="/review/{{ candidate.id }}/reject">
-      <input type="hidden" name="reviewer_token" value="{{ reviewer_token }}">
       <label>Reviewer name<input name="reviewer_name" value="local-reviewer"></label>
+      <label>Reviewer token<input type="text" name="reviewer_token" value="{{ reviewer_token }}" readonly></label>
       <label>Rejection note<textarea name="reviewer_note" rows="5" required></textarea></label>
       <button class="button danger" type="submit">Reject proposal</button>
     </form>
