@@ -313,8 +313,10 @@ def review_candidate(request: Request, candidate_id: int):
     if not candidate:
         raise HTTPException(404, "Candidate not found")
     systems = list_systems(limit=5000)
-    review_token = secrets.token_hex(24)
-    set_review_token(candidate_id, review_token)
+    review_token = get_review_token(candidate_id)
+    if not review_token:
+        review_token = secrets.token_hex(24)
+        set_review_token(candidate_id, review_token)
     return templates.TemplateResponse(request, "candidate_detail.html", context(request, candidate=candidate, systems=systems, review_token=review_token))
 
 
