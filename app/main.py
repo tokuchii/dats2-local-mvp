@@ -110,7 +110,7 @@ templates.env.filters["fmt_time"] = _fmt_time
 
 
 def context(request: Request, **kwargs):
-    return {"request": request, "categories": DATS_CATEGORIES, "proposed_count": count_candidates("proposed"), **kwargs}
+    return {"request": request, "categories": DATS_CATEGORIES, "proposed_count": count_candidates("proposed"), "reviewer_token": REVIEWER_TOKEN, **kwargs}
 
 
 def split_form_tags(value: str | None) -> list[str]:
