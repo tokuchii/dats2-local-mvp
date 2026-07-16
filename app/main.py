@@ -44,7 +44,11 @@ from .db import (
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    log.info("Starting DATS 2.0 — DATABASE_URL=%s", os.getenv("DATABASE_URL", "(not set)"))
+    raw_db = os.getenv("DATABASE_URL", "(not set)")
+    from urllib.parse import urlparse, urlunparse
+    parsed = urlparse(raw_db)
+    redacted = urlunparse(parsed._replace(netloc=parsed.netloc.replace(parsed.password, "•••") if parsed.password else parsed.netloc))
+    log.info("Starting DATS 2.0 — DATABASE_URL=%s", redacted)
     try:
         init_db()
         log.info("Database initialized successfully")
@@ -110,7 +114,8 @@ templates.env.filters["fmt_time"] = _fmt_time
 
 
 def context(request: Request, **kwargs):
-    return {"request": request, "categories": DATS_CATEGORIES, "proposed_count": count_candidates("proposed"), "reviewer_token": REVIEWER_TOKEN, **kwargs}
+    masked = "•" * len(REVIEWER_TOKEN) if REVIEWER_TOKEN else ""
+    return {"request": request, "categories": DATS_CATEGORIES, "proposed_count": count_candidates("proposed"), "reviewer_token": REVIEWER_TOKEN, "reviewer_token_display": masked, **kwargs}
 
 
 def split_form_tags(value: str | None) -> list[str]:
