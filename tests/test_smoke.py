@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("REVIEWER_TOKEN", "change-this-local-reviewer-token")
 
 from app.main import app  # noqa: E402
-from app.db import connect, init_db, get_review_token  # noqa: E402
+from app.db import connect, init_db, get_review_token, get_summary  # noqa: E402
 
 
 def test_dashboard_and_master_import():
@@ -20,8 +20,9 @@ def test_dashboard_and_master_import():
     with TestClient(app) as client:
         response = client.get("/")
         assert response.status_code == 200
-        assert "143" in response.text
         assert "DATS 2.0 Observatory" in response.text
+        summary = get_summary()
+        assert str(summary["systems"]) in response.text
         systems = client.get("/api/systems", params={"search": "DigiSaka", "token": os.environ.get("REVIEWER_TOKEN", "change-this-local-reviewer-token")})
         assert systems.status_code == 200
         assert systems.json()[0]["dats2_id"] == "D2-099"

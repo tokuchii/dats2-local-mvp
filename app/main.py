@@ -168,7 +168,7 @@ async def sse_events():
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     summary = get_summary()
-    recent = list_systems(limit=8)
+    recent = list_systems(limit=3)
     total_candidates = count_candidates("proposed")
     candidates = list_candidates("proposed")[:5]
     return templates.TemplateResponse(request, "dashboard.html", context(request, summary=summary, recent=recent, candidates=candidates, total_candidates=total_candidates))
