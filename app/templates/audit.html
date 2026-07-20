@@ -9,9 +9,9 @@
     {% if event.action == 'import_master' %}
       <span class="tag primary-tag">Import</span>
     {% elif event.action == 'approve_candidate' %}
-      <span class="tag" style="background:#d4edda;color:#155724;">Approved</span>
+      <span class="tag" style="background:var(--success);color:var(--white);">Approved</span>
     {% elif event.action == 'reject_candidate' %}
-      <span class="tag" style="background:#f8d7da;color:#721c24;">Rejected</span>
+      <span class="tag" style="background:var(--danger);color:var(--white);">Rejected</span>
     {% else %}
       <span class="tag">{{ event.action }}</span>
     {% endif %}
@@ -34,12 +34,12 @@
       {% else %}
         Created new system entry
       {% endif %}
-      {% if event.details.note %}<br><small style="color:#666;">Note: {{ event.details.note }}</small>{% endif %}
+      {% if event.details.note %}<br><small style="color:var(--muted);">Note: {{ event.details.note }}</small>{% endif %}
     {% elif event.action == 'reject_candidate' %}
       {% if event.details.note %}
         {{ event.details.note }}
       {% else %}
-        <span style="color:#999;">No note provided</span>
+        <span style="color:var(--muted);">No note provided</span>
       {% endif %}
     {% else %}
       <code>{{ event.details }}</code>

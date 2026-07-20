@@ -41,7 +41,7 @@
     {% if page > 1 %}
       <a class="button" href="?{{ request.url.query | replace('page=' ~ page, '') }}&page={{ page - 1 }}">Previous</a>
     {% endif %}
-    <span style="color:#666;">Page {{ page }} of {{ total_pages }}</span>
+    <span style="color:var(--muted);">Page {{ page }} of {{ total_pages }}</span>
     {% if page < total_pages %}
       <a class="button" href="?{{ request.url.query | replace('page=' ~ page, '') }}&page={{ page + 1 }}">Next</a>
     {% endif %}

@@ -65,12 +65,12 @@
     </form>
   </div>
   <style>
-    .token-field{position:relative;display:flex;align-items:center;gap:4px;background:#e9ecef;border:1px solid #dee2e6;border-radius:6px;padding:0 30px 0 10px;height:34px;min-width:160px;max-width:100%;overflow:hidden}
+    .token-field{position:relative;display:flex;align-items:center;gap:4px;background:var(--neutral-gray);border:1px solid var(--soft-cyan);border-radius:6px;padding:0 30px 0 10px;height:34px;min-width:160px;max-width:100%;overflow:hidden}
     .token-dots{display:flex;align-items:center;gap:3px;overflow:hidden}
-    .token-dot{display:inline-block;width:6px;height:6px;background:#495057;border-radius:50%;flex-shrink:0}
-    .token-plain{font-family:monospace;font-size:12px;color:#495057;letter-spacing:.5px;word-break:break-all}
-    .token-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;padding:2px;cursor:pointer;color:#6c757d;display:inline-flex;align-items:center;line-height:1;z-index:1}
-    .token-eye:hover{color:#212529}
+    .token-dot{display:inline-block;width:6px;height:6px;background:var(--dark-gray);border-radius:50%;flex-shrink:0}
+    .token-plain{font-family:monospace;font-size:12px;color:var(--dark-gray);letter-spacing:.5px;word-break:break-all}
+    .token-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;padding:2px;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;line-height:1;z-index:1}
+    .token-eye:hover{color:var(--dark-gray)}
   </style>
   <script>
     function toggleToken(btn){

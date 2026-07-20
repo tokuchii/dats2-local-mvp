@@ -133,5 +133,22 @@
   }
 })();
 </script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const navLinks = document.querySelectorAll('.topbar nav a');
+  const currentPath = window.location.pathname;
+  navLinks.forEach(link => {
+    // Create a URL object from the link's href (relative to the current origin)
+    const linkUrl = new URL(link.href, window.location.origin);
+    const linkPath = linkUrl.pathname;
+    // Normalize paths: remove trailing slash unless it's the root
+    const normLink = linkPath === '/' ? linkPath : linkPath.replace(/\/+$/, '');
+    const normCurrent = currentPath === '/' ? currentPath : currentPath.replace(/\/+$/, '');
+    if (normLink === normCurrent) {
+      link.classList.add('active');
+    }
+  });
+});
+</script>
 </body>
 </html>

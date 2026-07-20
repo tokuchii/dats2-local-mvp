@@ -3,6 +3,14 @@
 {% block content %}
 <div class="page-heading"><div><p class="eyebrow">Agent-assisted intake</p><h1>Submit a digital agriculture system</h1><p>The agent extracts and proposes fields. Nothing enters the canonical database until a reviewer approves or merges it.</p></div></div>
 
+<section class="panel workflow">
+  <div><span>Acquire</span><small>Download or parse evidence</small></div><b>→</b>
+  <div><span>Extract</span><small>Structured DATS fields</small></div><b>→</b>
+  <div><span>Classify</span><small>Multi-label functions and tags</small></div><b>→</b>
+  <div><span>Compare</span><small>Duplicate/entity resolution</small></div><b>→</b>
+  <div><span>Review</span><small>Approve, edit, merge or reject</small></div>
+</section>
+
 <div class="grid three submit-grid">
   <form class="panel form-panel" method="post" action="/submit/url" data-submit>
     <span class="step">1</span><h2>Paste a public link</h2><p>Official page, app listing, repository, paper, PDF or project page.</p>
@@ -56,11 +64,4 @@
 })();
 </script>
 
-<section class="panel workflow">
-  <div><span>Acquire</span><small>Download or parse evidence</small></div><b>→</b>
-  <div><span>Extract</span><small>Structured DATS fields</small></div><b>→</b>
-  <div><span>Classify</span><small>Multi-label functions and tags</small></div><b>→</b>
-  <div><span>Compare</span><small>Duplicate/entity resolution</small></div><b>→</b>
-  <div><span>Review</span><small>Approve, edit, merge or reject</small></div>
-</section>
 {% endblock %}

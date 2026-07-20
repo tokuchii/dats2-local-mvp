@@ -1,5 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — DATS 2.0{% endblock %}
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .chart-container {
+      width: 100%;
+      max-width: 500px;
+      margin: 20px auto;
+    }
+  </style>
+{% endblock %}
 {% block content %}
 <section class="hero">
   <div>
@@ -23,29 +33,15 @@
 <div class="grid two">
   <section class="panel">
     <div class="panel-heading"><div><p class="eyebrow">Coverage</p><h2>Primary categories</h2></div><span class="pill">Distinct counts</span></div>
-    {% set max_cat = summary.categories.values()|max if summary.categories else 1 %}
-    <div class="bar-list">
-      {% for label, count in summary.categories.items() %}
-      <a class="bar-row" href="/systems?category={{ label|urlencode }}">
-        <span class="bar-label">{{ label }}</span>
-        <span class="bar-track"><span class="bar-fill" style="width: {{ (count / max_cat * 100)|round }}%"></span></span>
-        <strong>{{ count }}</strong>
-      </a>
-      {% endfor %}
+    <div class="chart-container">
+      <canvas id="categoryChart"></canvas>
     </div>
   </section>
 
   <section class="panel">
     <div class="panel-heading"><div><p class="eyebrow">Animal sector</p><h2>Livestock and poultry coverage</h2></div></div>
-    {% set max_live = summary.livestock.values()|max if summary.livestock else 1 %}
-    <div class="bar-list">
-      {% for label, count in summary.livestock.items() %}
-      <a class="bar-row" href="/systems?livestock={{ label|urlencode }}">
-        <span class="bar-label">{{ label }}</span>
-        <span class="bar-track"><span class="bar-fill alt" style="width: {{ (count / max_live * 100)|round }}%"></span></span>
-        <strong>{{ count }}</strong>
-      </a>
-      {% endfor %}
+    <div class="chart-container">
+      <canvas id="livestockChart"></canvas>
     </div>
   </section>
 </div>
@@ -57,7 +53,7 @@
       <table>
         <thead><tr><th>ID</th><th>System</th><th>Primary category</th><th>Status</th></tr></thead>
         <tbody>
-        {% for item in recent %}
+        {% for item in recent[:3] %}
           <tr>
             <td><a href="/systems/{{ item.dats2_id }}">{{ item.dats2_id }}</a></td>
             <td><strong>{{ item.name }}</strong><small>{{ item.developer_owner or '' }}</small></td>
@@ -86,4 +82,101 @@
     {% endif %}
   </section>
 </div>
+
+
+<script>
+  // Chart.js horizontal bar charts
+  const ctxCat = document.getElementById('categoryChart').getContext('2d');
+  new Chart(ctxCat, {
+    type: 'bar',
+    data: {
+      labels: {{ summary.categories.keys()|list|tojson }},
+      datasets: [{
+        label: 'Count',
+        data: {{ summary.categories.values()|list|tojson }},
+        backgroundColor: '#399AFF', // teal from palette
+        borderColor: '#399AFF',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              let label = context.dataset.label || '';
+              if (label) {
+                label += ': ';
+              }
+              label += context.parsed.x;
+              return label;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: {
+            // Force integer ticks
+            callback: function(value) {
+              return Number.isInteger(value) ? value : '';
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const ctxLiv = document.getElementById('livestockChart').getContext('2d');
+  new Chart(ctxLiv, {
+    type: 'bar',
+    data: {
+      labels: {{ summary.livestock.keys()|list|tojson }},
+      datasets: [{
+        label: 'Count',
+        data: {{ summary.livestock.values()|list|tojson }},
+        backgroundColor: '#0057B8', // blue from palette
+        borderColor: '#0057B8',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              let label = context.dataset.label || '';
+              if (label) {
+                label += ': ';
+              }
+              label += context.parsed.x;
+              return label;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: {
+            callback: function(value) {
+              return Number.isInteger(value) ? value : '';
+            }
+          }
+        }
+      }
+    }
+  });
+</script>
 {% endblock %}
