@@ -472,7 +472,7 @@ input, select, textarea {
   font: inherit;
   transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
-textarea { resize: vertical; }
+textarea { resize: none; }
 input:focus, select:focus, textarea:focus {
   outline: 3px solid rgba(0,87,184,.15);
   border-color: var(--blue);
