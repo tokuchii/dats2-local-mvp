@@ -18,6 +18,14 @@
   var subId = {{ submission.id }};
   var currentStatus = '{{ submission.status }}';
   var es = new EventSource('/api/events');
+  var reconnectDelay = 1000;
+
+  function closeStream() {
+    if (es) {
+      es.close();
+    }
+  }
+
   es.onmessage = function(e) {
     var data = JSON.parse(e.data);
     if (data.event !== 'submission_status_changed' || data.submission_id !== subId) return;
@@ -30,15 +38,31 @@
     bar.className = currentStatus;
     if (currentStatus === 'needs_review' && data.candidate_id) {
       action.innerHTML = '<a class="button primary" href="/review/' + data.candidate_id + '">Review candidate</a>';
-      es.close();
-    } else if (currentStatus === 'failed') {
+      closeStream();
+      return;
+    }
+    if (currentStatus === 'failed') {
       var message = data.error_message || 'Processing failed';
       action.innerHTML = '<div class="error-box">' + message + '</div><p><a class="button" href="/submit">Submit another system</a></p>';
       showToast('error', message);
-      es.close();
+      closeStream();
+      return;
+    }
+    if (currentStatus === 'approved' || currentStatus === 'rejected') {
+      closeStream();
     }
   };
-  window.addEventListener('pagehide', function(){ es.close(); });
+
+  es.onerror = function() {
+    if (es.readyState === EventSource.CLOSED) return;
+    closeStream();
+    setTimeout(function() {
+      es = new EventSource('/api/events');
+    }, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+  };
+
+  window.addEventListener('pagehide', closeStream);
 })();
 </script>
 {% endblock %}

@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 from pypdf import PdfReader
 from rapidfuzz import fuzz
 
-from .config import OPENAI_API_KEY, OPENAI_MODEL
+from .config import OPENAI_API_KEY, OPENAI_MODEL, OPENAI_BASE_URL
 
 log = logging.getLogger(__name__)
 from .db import connect, create_candidate, get_submission, update_submission
@@ -453,11 +453,15 @@ def heuristic_assessment(document: dict[str, Any]) -> Assessment:
 
 
 def openai_assessment(document: dict[str, Any]) -> Assessment | None:
-    if not OPENAI_API_KEY:
+    api_key = (OPENAI_API_KEY or "ollama").strip()
+    if not api_key:
         return None
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=OPENAI_API_KEY)
+        client_kwargs = {"api_key": api_key}
+        if OPENAI_BASE_URL:
+            client_kwargs["base_url"] = OPENAI_BASE_URL
+        client = OpenAI(**client_kwargs)
         user_content = json.dumps({
             "source_url": document.get("url"),
             "title": document.get("title"),
@@ -479,7 +483,7 @@ def openai_assessment(document: dict[str, Any]) -> Assessment | None:
             result.source_url = document.get("url")
         return result
     except Exception as exc:
-        log.warning("OpenAI assessment failed, falling back: %s", exc)
+        log.warning("LLM assessment failed, falling back: %s", exc)
         return None
 
 
@@ -512,7 +516,7 @@ def process_submission(submission_id: int) -> int:
         document = acquire_submission(submission)
         assessment = openai_assessment(document)
         if assessment:
-            mode = f"OpenAI: {OPENAI_MODEL}"
+            mode = f"LLM: {OPENAI_MODEL}"
         else:
             mode = "Deterministic fallback"
             assessment = heuristic_assessment(document)

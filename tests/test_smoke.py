@@ -14,6 +14,23 @@ os.environ.setdefault("REVIEWER_TOKEN", "change-this-local-reviewer-token")
 from app.main import app  # noqa: E402
 from app.db import connect, init_db, get_review_token, get_summary  # noqa: E402
 from app.agent import fetch_url  # noqa: E402
+import importlib
+import app.config as config_module
+
+
+def test_llama_ollama_backend_config(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setenv("LLM_MODEL", "llama3.1")
+    monkeypatch.setenv("LLM_API_KEY", "ollama")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    importlib.reload(config_module)
+    assert config_module.LLM_PROVIDER == "ollama"
+    assert config_module.LLM_BASE_URL == "http://localhost:11434/v1"
+    assert config_module.LLM_MODEL == "llama3.1"
+    assert config_module.LLM_API_KEY == "ollama"
+    importlib.reload(config_module)
 
 
 def test_fetch_url_reports_forbidden_sites_cleanly(monkeypatch):
@@ -87,6 +104,24 @@ def test_pasted_text_assessment_and_review():
         detail = client.get(f"/review/{candidate['id']}")
         assert detail.status_code == 200
         assert "Possible duplicates" in detail.text
+
+
+def test_submission_status_page_avoids_reload_loop():
+    with connect() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM system_versions WHERE candidate_id IS NOT NULL")
+        cur.execute("DELETE FROM candidates")
+        cur.execute("DELETE FROM submissions")
+    text = "AgriFlow is a Philippine digital agriculture inventory and monitoring portal for rice and corn farmers."
+    with TestClient(app) as client:
+        response = client.post("/submit/text", data={"text": text, "source_url": "", "submitted_by": "Test"}, follow_redirects=True)
+        assert response.status_code == 200
+        submission_id = client.get("/api/candidates", params={"token": os.environ.get("REVIEWER_TOKEN", "change-this-local-reviewer-token")}).json()[0]["submission_id"]
+        page = client.get(f"/submissions/{submission_id}")
+        assert page.status_code == 200
+        assert "submission_status_changed" in page.text
+        assert "window.location.reload()" not in page.text
+        assert "setTimeout(function(){ window.location.reload(); }, 1500);" not in page.text
 
 
 def test_reviewer_token_autofilled_and_auth():

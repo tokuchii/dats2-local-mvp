@@ -48,5 +48,26 @@ try:
 except ValueError:
     MAX_UPLOAD_MB = 25
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-2024-11-20").strip()
+LLM_PROVIDER = (os.getenv("LLM_PROVIDER") or os.getenv("MODEL_PROVIDER") or "openai").strip().lower()
+LLM_BASE_URL = (
+    os.getenv("LLM_BASE_URL")
+    or os.getenv("OPENAI_BASE_URL")
+    or os.getenv("DEEPSEEK_BASE_URL")
+    or ""
+).strip()
+LLM_API_KEY = (
+    os.getenv("LLM_API_KEY")
+    or os.getenv("OPENAI_API_KEY")
+    or os.getenv("DEEPSEEK_API_KEY")
+    or ""
+).strip()
+LLM_MODEL = (
+    os.getenv("LLM_MODEL")
+    or os.getenv("OPENAI_MODEL")
+    or os.getenv("DEEPSEEK_MODEL")
+    or "deepseek-chat"
+).strip()
+
+OPENAI_API_KEY = LLM_API_KEY
+OPENAI_MODEL = LLM_MODEL
+OPENAI_BASE_URL = LLM_BASE_URL
