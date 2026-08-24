@@ -30,8 +30,12 @@
     bar.className = currentStatus;
     if (currentStatus === 'needs_review' && data.candidate_id) {
       action.innerHTML = '<a class="button primary" href="/review/' + data.candidate_id + '">Review candidate</a>';
+      es.close();
     } else if (currentStatus === 'failed') {
-      showToast('error', data.error_message || 'Processing failed');
+      var message = data.error_message || 'Processing failed';
+      action.innerHTML = '<div class="error-box">' + message + '</div><p><a class="button" href="/submit">Submit another system</a></p>';
+      showToast('error', message);
+      es.close();
     }
   };
   window.addEventListener('pagehide', function(){ es.close(); });

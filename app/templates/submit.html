@@ -51,7 +51,17 @@
         .then(function(r){
           if (r.redirected) { window.location.href = r.url; return; }
           if (r.ok) { window.location.reload(); return; }
-          return r.json().then(function(d){ throw new Error(d.detail || 'Submission failed'); });
+          return r.text().then(function(text){
+            try {
+              var data = JSON.parse(text);
+              throw new Error(data.detail || 'Submission failed');
+            } catch (parseErr) {
+              if (text && text.indexOf('<html') === -1) {
+                throw new Error(text.trim() || 'Submission failed');
+              }
+              throw new Error('Submission failed. Please try again.');
+            }
+          });
         })
         .catch(function(err){
           showToast('error', err.message || 'Submission failed');
