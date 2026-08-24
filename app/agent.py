@@ -138,6 +138,65 @@ def validate_public_url(url: str) -> None:
             raise ValueError("Local/private network targets are blocked")
 
 
+def extract_readable_html_text(soup: BeautifulSoup, url: str | None = None) -> str:
+    host = (urlparse(url or "").hostname or "").lower()
+    selectors = []
+    if "github.com" in host or "gitlab.com" in host:
+        selectors = ["#readme", ".markdown-body", "article", "main", "body"]
+    else:
+        selectors = ["main", "article", ".content", ".body", "body"]
+
+    candidate = None
+    for selector in selectors:
+        candidate = soup.select_one(selector)
+        if candidate is not None:
+            break
+    if candidate is None:
+        candidate = soup.body or soup
+
+    for tag in candidate.select("script, style, noscript, svg, nav, header, footer, aside, form, button"):
+        tag.decompose()
+
+    text = "\n".join(line.strip() for line in candidate.get_text("\n").splitlines() if line.strip())
+    cleaned: list[str] = []
+    skip_tokens = (
+        "skip to content",
+        "sign in",
+        "navigation menu",
+        "appearance settings",
+        "you signed in with another tab or window",
+        "search",
+        "menu",
+        "sign up",
+    )
+    for line in text.splitlines():
+        stripped = " ".join(line.split())
+        if not stripped:
+            continue
+        lowered = stripped.lower()
+        if any(token in lowered for token in skip_tokens):
+            continue
+        if lowered.startswith("github ") or lowered.startswith("gitlab "):
+            continue
+        cleaned.append(stripped)
+
+    readable = "\n".join(cleaned)
+    if len(readable) < 200:
+        fallback = "\n".join(line.strip() for line in soup.get_text("\n").splitlines() if line.strip())
+        fallback_lines = []
+        for line in fallback.splitlines():
+            stripped = " ".join(line.split())
+            if not stripped:
+                continue
+            lowered = stripped.lower()
+            if any(token in lowered for token in skip_tokens):
+                continue
+            fallback_lines.append(stripped)
+        readable = "\n".join(fallback_lines)
+
+    return readable[:220_000]
+
+
 def fetch_url(url: str) -> dict[str, Any]:
     validate_public_url(url)
     headers = {
@@ -168,10 +227,8 @@ def fetch_url(url: str) -> dict[str, Any]:
                 return {"url": final_url, "title": None, "text": response.text[:220_000], "links": [], "content_type": content_type}
 
         soup = BeautifulSoup(response.text, "html.parser")
-        for tag in soup(["script", "style", "noscript", "svg", "nav"]):
-            tag.decompose()
         title = soup.title.get_text(" ", strip=True) if soup.title else None
-        text = "\n".join(line.strip() for line in soup.get_text("\n").splitlines() if line.strip())
+        readable_text = extract_readable_html_text(soup, final_url)
         links: list[dict[str, str]] = []
         seen: set[str] = set()
         for a in soup.find_all("a", href=True):
@@ -183,7 +240,7 @@ def fetch_url(url: str) -> dict[str, Any]:
             label = a.get_text(" ", strip=True)[:180]
             if any(token in (href + " " + label).lower() for token in ["github", "gitlab", "repository", "source code", "api", "developer", "documentation", "download", "apk", "license"]):
                 links.append({"url": href, "label": label})
-        return {"url": final_url, "title": title, "text": text[:220_000], "links": links[:60], "content_type": content_type}
+        return {"url": final_url, "title": title, "text": readable_text or response.text[:220_000], "links": links[:60], "content_type": content_type}
     except httpx.HTTPStatusError as exc:
         status_code = exc.response.status_code if exc.response is not None else "unknown"
         if status_code == 403:
@@ -236,7 +293,18 @@ def acquire_submission(submission: dict[str, Any]) -> dict[str, Any]:
 
 def sentences(text: str) -> list[str]:
     compact = re.sub(r"\s+", " ", text).strip()
-    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", compact) if len(s.strip()) >= 30]
+    parts = []
+    for sentence in re.split(r"(?<=[.!?])\s+", compact):
+        cleaned = sentence.strip()
+        if len(cleaned) < 30:
+            continue
+        lowered = cleaned.lower()
+        if "github" in lowered or "gitlab" in lowered:
+            continue
+        if any(token in lowered for token in ["skip to content", "sign in", "navigation menu", "appearance settings", "you signed in with another tab or window"]):
+            continue
+        parts.append(cleaned)
+    return parts
 
 
 def clean_title(title: str | None, text: str) -> str:

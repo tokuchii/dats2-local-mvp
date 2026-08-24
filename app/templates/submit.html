@@ -49,8 +49,13 @@
       var fd = new FormData(form);
       fetch(form.action, { method: 'POST', body: fd })
         .then(function(r){
-          if (r.redirected) { window.location.href = r.url; return; }
-          if (r.ok) { window.location.reload(); return; }
+          if (r.redirected && r.url) {
+            window.location.href = r.url;
+            return;
+          }
+          if (r.ok) {
+            return;
+          }
           return r.text().then(function(text){
             try {
               var data = JSON.parse(text);

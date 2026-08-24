@@ -19,14 +19,29 @@
   var currentStatus = '{{ submission.status }}';
   var es = new EventSource('/api/events');
   var reconnectDelay = 1000;
+  var reconnectTimer = null;
 
   function closeStream() {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = null;
     if (es) {
       es.close();
     }
   }
 
-  es.onmessage = function(e) {
+  function scheduleReconnect() {
+    if (reconnectTimer || es.readyState === EventSource.CLOSED) return;
+    reconnectTimer = setTimeout(function() {
+      reconnectTimer = null;
+      es.close();
+      es = new EventSource('/api/events');
+      es.onmessage = handleMessage;
+      es.onerror = handleError;
+    }, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+  }
+
+  function handleMessage(e) {
     var data = JSON.parse(e.data);
     if (data.event !== 'submission_status_changed' || data.submission_id !== subId) return;
     currentStatus = data.status;
@@ -51,16 +66,15 @@
     if (currentStatus === 'approved' || currentStatus === 'rejected') {
       closeStream();
     }
-  };
+  }
 
-  es.onerror = function() {
+  function handleError() {
     if (es.readyState === EventSource.CLOSED) return;
-    closeStream();
-    setTimeout(function() {
-      es = new EventSource('/api/events');
-    }, reconnectDelay);
-    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
-  };
+    scheduleReconnect();
+  }
+
+  es.onmessage = handleMessage;
+  es.onerror = handleError;
 
   window.addEventListener('pagehide', closeStream);
 })();

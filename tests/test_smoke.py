@@ -11,9 +11,11 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault("REVIEWER_TOKEN", "change-this-local-reviewer-token")
 
+from bs4 import BeautifulSoup
+
 from app.main import app  # noqa: E402
 from app.db import connect, init_db, get_review_token, get_summary  # noqa: E402
-from app.agent import fetch_url  # noqa: E402
+from app.agent import extract_readable_html_text, fetch_url, heuristic_assessment  # noqa: E402
 import importlib
 import app.config as config_module
 
@@ -31,6 +33,43 @@ def test_llama_ollama_backend_config(monkeypatch):
     assert config_module.LLM_MODEL == "llama3.1"
     assert config_module.LLM_API_KEY == "ollama"
     importlib.reload(config_module)
+
+
+def test_extract_readable_html_text_filters_github_boilerplate():
+    html = """
+    <html>
+      <head><title>GitHub - annaraza/Plot2Map: Plot-to-map comparison of aboveground biomass workflow</title></head>
+      <body>
+        <nav>GitHub Skip to content Navigation Menu Sign in Appearance settings</nav>
+        <main>
+          <article class="markdown-body">
+            <h1>Plot2Map</h1>
+            <p>Plot2Map provides a geospatial workflow for comparing aboveground biomass with yield and field observations.</p>
+            <p>The platform supports researchers, extension workers, and agronomists in mapping production patterns and productivity analytics.</p>
+          </article>
+        </main>
+      </body>
+    </html>
+    """
+    text = extract_readable_html_text(BeautifulSoup(html, "html.parser"), "https://github.com/annaraza/Plot2Map")
+    assert "Plot2Map provides" in text
+    assert "skip to content" not in text.lower()
+    assert "sign in" not in text.lower()
+    assert "navigation menu" not in text.lower()
+
+
+def test_heuristic_assessment_ignores_github_shell_text():
+    doc = {
+        "title": "GitHub - annaraza/Plot2Map: Plot-to-map comparison of aboveground biomass workflow",
+        "url": "https://github.com/annaraza/Plot2Map",
+        "text": "GitHub - annaraza/Plot2Map: Plot-to-map comparison of aboveground biomass workflow. GitHub Skip to content Navigation Menu Sign in Appearance settings Search / Sign in Sign up. You signed in with another tab or window. Plot2Map provides a geospatial workflow for comparing aboveground biomass with yield and field observations. The platform supports researchers, extension workers, and agronomists in mapping production patterns and productivity analytics.",
+        "links": [],
+    }
+    assessment = heuristic_assessment(doc)
+    summary = assessment.core_function.lower()
+    assert "github" not in summary
+    assert "skip to content" not in summary
+    assert "plot2map" in summary and ("provides" in summary or "supports" in summary)
 
 
 def test_fetch_url_reports_forbidden_sites_cleanly(monkeypatch):
@@ -122,6 +161,28 @@ def test_submission_status_page_avoids_reload_loop():
         assert "submission_status_changed" in page.text
         assert "window.location.reload()" not in page.text
         assert "setTimeout(function(){ window.location.reload(); }, 1500);" not in page.text
+
+
+def test_submit_page_has_no_reload_loop():
+    with connect() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM system_versions WHERE candidate_id IS NOT NULL")
+        cur.execute("DELETE FROM candidates")
+        cur.execute("DELETE FROM submissions")
+    text = "AgriFlow is a Philippine digital agriculture inventory and monitoring portal for rice and corn farmers."
+    with TestClient(app) as client:
+        submit_page = client.get("/submit")
+        assert submit_page.status_code == 200
+        assert "window.location.reload()" not in submit_page.text
+        response = client.post("/submit/text", data={"text": text, "source_url": "", "submitted_by": "Test"}, follow_redirects=True)
+        assert response.status_code == 200
+        candidate_id = client.get("/api/candidates", params={"token": os.environ.get("REVIEWER_TOKEN", "change-this-local-reviewer-token")}).json()[0]["id"]
+        detail = client.get(f"/review/{candidate_id}")
+        assert detail.status_code == 200
+        assert "Editable proposal" in detail.text
+        system = client.get("/systems/D2-099")
+        assert system.status_code == 200
+        assert "Core function" in system.text
 
 
 def test_reviewer_token_autofilled_and_auth():

@@ -65,39 +65,56 @@
 (function(){
   var es = new EventSource('/api/events');
   var reconnectDelay = 1000;
+  var reconnectTimer = null;
   var navigating = false;
-  es.onmessage = function(e) {
-    reconnectDelay = 1000;
-    var data = JSON.parse(e.data);
-    var event = data.event;
-    if (event === 'system_approved') {
-      window.showToast('success', 'System ' + data.dats2_id + ' approved (v' + data.version + ')');
-      syncBadge();
-    } else if (event === 'candidate_rejected') {
-      window.showToast('info', 'Candidate #' + data.candidate_id + ' rejected');
-      syncBadge();
-    } else if (event === 'candidate_saved') {
-      window.showToast('info', 'Candidate #' + data.candidate_id + ' updated');
-    } else if (event === 'submission_created') {
-      window.showToast('success', 'New ' + data.source_type + ' submission queued');
-      syncBadge();
-    } else if (event === 'proposed_count_changed') {
-      var badge = document.getElementById('nav-proposed-badge');
-      if (badge) {
-        var count = data.count || 0;
-        badge.textContent = count;
-        badge.style.display = count > 0 ? '' : 'none';
-      }
-      syncBadge();
-    }
-  };
-  es.onerror = function() {
-    if (navigating || es.readyState === EventSource.CLOSED) return;
-    es.close();
-    setTimeout(function() { es = new EventSource('/api/events'); }, reconnectDelay);
+
+  function scheduleReconnect() {
+    if (navigating || reconnectTimer || es.readyState === EventSource.CLOSED) return;
+    reconnectTimer = setTimeout(function() {
+      reconnectTimer = null;
+      es.close();
+      es = new EventSource('/api/events');
+      attachHandlers(es);
+    }, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 2, 30000);
-  };
-  function closeSSE() { navigating = true; es.close(); }
+  }
+
+  function attachHandlers(stream) {
+    stream.onmessage = function(e) {
+      reconnectDelay = 1000;
+      var data = JSON.parse(e.data);
+      var event = data.event;
+      if (event === 'system_approved') {
+        window.showToast('success', 'System ' + data.dats2_id + ' approved (v' + data.version + ')');
+        syncBadge();
+      } else if (event === 'candidate_rejected') {
+        window.showToast('info', 'Candidate #' + data.candidate_id + ' rejected');
+        syncBadge();
+      } else if (event === 'candidate_saved') {
+        window.showToast('info', 'Candidate #' + data.candidate_id + ' updated');
+      } else if (event === 'submission_created') {
+        window.showToast('success', 'New ' + data.source_type + ' submission queued');
+        syncBadge();
+      } else if (event === 'proposed_count_changed') {
+        var badge = document.getElementById('nav-proposed-badge');
+        if (badge) {
+          var count = data.count || 0;
+          badge.textContent = count;
+          badge.style.display = count > 0 ? '' : 'none';
+        }
+        syncBadge();
+      }
+    };
+
+    stream.onerror = function() {
+      if (navigating || stream.readyState === EventSource.CLOSED) return;
+      scheduleReconnect();
+    };
+  }
+
+  attachHandlers(es);
+
+  function closeSSE() { navigating = true; if (reconnectTimer) clearTimeout(reconnectTimer); reconnectTimer = null; es.close(); }
   window.addEventListener('pagehide', closeSSE);
   window.addEventListener('beforeunload', closeSSE);
   document.addEventListener('visibilitychange', function() {
