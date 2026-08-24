@@ -13,6 +13,41 @@ os.environ.setdefault("REVIEWER_TOKEN", "change-this-local-reviewer-token")
 
 from app.main import app  # noqa: E402
 from app.db import connect, init_db, get_review_token, get_summary  # noqa: E402
+from app.agent import fetch_url  # noqa: E402
+
+
+def test_fetch_url_reports_forbidden_sites_cleanly(monkeypatch):
+    class FakeResponse:
+        status_code = 403
+        headers = {"content-type": "text/html"}
+        url = "https://ijoear.com/blog/precision-agriculture-maximizing-efficiency-and-minimizing-waste"
+        text = "<html>forbidden</html>"
+        content = b"<html>forbidden</html>"
+
+        def raise_for_status(self):
+            raise RuntimeError("Client error '403 Forbidden' for url 'https://ijoear.com/blog/precision-agriculture-maximizing-efficiency-and-minimizing-waste'")
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url, **kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr("app.agent.httpx.Client", FakeClient)
+    try:
+        fetch_url("https://ijoear.com/blog/precision-agriculture-maximizing-efficiency-and-minimizing-waste")
+    except ValueError as exc:
+        assert "403" in str(exc)
+        assert "blocked" in str(exc).lower()
+    else:
+        raise AssertionError("Expected a ValueError for a forbidden URL")
 
 
 def test_dashboard_and_master_import():

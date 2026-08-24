@@ -140,38 +140,60 @@ def validate_public_url(url: str) -> None:
 
 def fetch_url(url: str) -> dict[str, Any]:
     validate_public_url(url)
-    headers = {"User-Agent": "DATS2Local/1.0 (+human-reviewed digital agriculture registry)"}
-    with httpx.Client(follow_redirects=True, timeout=35, headers=headers) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        if int(response.headers.get("content-length", "0") or 0) > 12_000_000:
-            raise ValueError("Remote file exceeds the 12 MB acquisition limit")
-        content_type = response.headers.get("content-type", "").lower()
-        final_url = str(response.url)
-        if "pdf" in content_type or final_url.lower().endswith(".pdf"):
-            reader = PdfReader(BytesIO(response.content))
-            text = "\n".join((page.extract_text() or "") for page in reader.pages)
-            return {"url": final_url, "title": Path(urlparse(final_url).path).name, "text": text[:220_000], "links": [], "content_type": content_type}
-        if "html" not in content_type:
-            return {"url": final_url, "title": None, "text": response.text[:220_000], "links": [], "content_type": content_type}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Upgrade-Insecure-Requests": "1",
+        "DNT": "1",
+    }
+    try:
+        with httpx.Client(follow_redirects=True, timeout=35, headers=headers) as client:
+            response = client.get(url)
+            if response.status_code == 403:
+                raise ValueError(
+                    f"Website blocked automated access (HTTP 403): {url}. "
+                    "Please provide the source as a file, pasted text, or a different public URL."
+                )
+            response.raise_for_status()
+            if int(response.headers.get("content-length", "0") or 0) > 12_000_000:
+                raise ValueError("Remote file exceeds the 12 MB acquisition limit")
+            content_type = response.headers.get("content-type", "").lower()
+            final_url = str(response.url)
+            if "pdf" in content_type or final_url.lower().endswith(".pdf"):
+                reader = PdfReader(BytesIO(response.content))
+                text = "\n".join((page.extract_text() or "") for page in reader.pages)
+                return {"url": final_url, "title": Path(urlparse(final_url).path).name, "text": text[:220_000], "links": [], "content_type": content_type}
+            if "html" not in content_type:
+                return {"url": final_url, "title": None, "text": response.text[:220_000], "links": [], "content_type": content_type}
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    for tag in soup(["script", "style", "noscript", "svg", "nav"]):
-        tag.decompose()
-    title = soup.title.get_text(" ", strip=True) if soup.title else None
-    text = "\n".join(line.strip() for line in soup.get_text("\n").splitlines() if line.strip())
-    links: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for a in soup.find_all("a", href=True):
-        href = urljoin(final_url, a["href"])
-        p = urlparse(href)
-        if p.scheme not in {"http", "https"} or href in seen:
-            continue
-        seen.add(href)
-        label = a.get_text(" ", strip=True)[:180]
-        if any(token in (href + " " + label).lower() for token in ["github", "gitlab", "repository", "source code", "api", "developer", "documentation", "download", "apk", "license"]):
-            links.append({"url": href, "label": label})
-    return {"url": final_url, "title": title, "text": text[:220_000], "links": links[:60], "content_type": content_type}
+        soup = BeautifulSoup(response.text, "html.parser")
+        for tag in soup(["script", "style", "noscript", "svg", "nav"]):
+            tag.decompose()
+        title = soup.title.get_text(" ", strip=True) if soup.title else None
+        text = "\n".join(line.strip() for line in soup.get_text("\n").splitlines() if line.strip())
+        links: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for a in soup.find_all("a", href=True):
+            href = urljoin(final_url, a["href"])
+            p = urlparse(href)
+            if p.scheme not in {"http", "https"} or href in seen:
+                continue
+            seen.add(href)
+            label = a.get_text(" ", strip=True)[:180]
+            if any(token in (href + " " + label).lower() for token in ["github", "gitlab", "repository", "source code", "api", "developer", "documentation", "download", "apk", "license"]):
+                links.append({"url": href, "label": label})
+        return {"url": final_url, "title": title, "text": text[:220_000], "links": links[:60], "content_type": content_type}
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code if exc.response is not None else "unknown"
+        if status_code == 403:
+            raise ValueError(
+                f"Website blocked automated access (HTTP 403): {url}. "
+                "Please provide the source as a file, pasted text, or a different public URL."
+            ) from exc
+        raise ValueError(f"Could not fetch public URL ({status_code}): {url}") from exc
+    except httpx.HTTPError as exc:
+        raise ValueError(f"Could not fetch public URL: {url}. Network error: {exc}") from exc
 
 
 def extract_file(path: str) -> dict[str, Any]:
