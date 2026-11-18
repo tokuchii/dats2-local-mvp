@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}DATS 2.0{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/"><span class="brand-mark">D2</span><span>DATS 2.0 Observatory</span></a>
+  <nav>
+    <a href="/">Dashboard</a>
+    <a href="/systems">Systems</a>
+    <a href="/submit">Submit</a>
+    <a href="/review">Review</a>
+    <a href="/audit">Audit</a>
+  </nav>
+  <div class="top-actions">
+    <a class="button ghost" href="/export/current.xlsx">Export XLSX</a>
+  </div>
+</header>
+<main class="container">
+  {% block content %}{% endblock %}
+</main>
+<footer>
+  Local, human-reviewed DATS 2.0 registry. Agent assessments are proposals until approved.
+</footer>
+</body>
+</html>
