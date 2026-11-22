@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Systems — DATS 2.0{% endblock %}
+{% block head %}<script src="{{ url_for('static', path='export-modal.js') }}" defer></script>{% endblock %}
 {% block content %}
 <div class="page-heading">
   <div><p class="eyebrow">Canonical database</p><h1>Systems explorer</h1><p>{{ total }} matching records (page {{ page }} of {{ total_pages }}). Category filters include primary and secondary classifications.</p></div>
-  <div><a class="button" href="/export/current.csv">Export CSV</a></div>
+  <div class="heading-actions"><a class="button primary" href="/export/preview{% if export_query %}?{{ export_query }}{% endif %}" data-export-modal data-export-modal-url="/export/modal{% if export_query %}?{{ export_query }}{% endif %}">Preview &amp; export</a></div>
 </div>
 
 <form class="filters panel" method="get">
@@ -16,8 +17,9 @@
 </form>
 
 <section class="panel table-panel">
+  <p class="table-scroll-hint">Swipe or scroll sideways to view all 7 columns.</p>
   <div class="table-wrap">
-    <table class="wide-table">
+    <table class="wide-table systems-table">
       <thead><tr><th>ID</th><th>System</th><th>Owner</th><th>Functions</th><th>Commodity/species</th><th>Status</th><th>SINAG</th></tr></thead>
       <tbody>
       {% for item in systems %}
@@ -48,4 +50,11 @@
   </div>
   {% endif %}
 </section>
+
+<dialog id="export-modal" class="export-modal" aria-label="Export preview">
+  <div class="export-modal-card">
+    <div class="export-modal-loading" data-export-loading>Loading export preview...</div>
+    <div data-export-content></div>
+  </div>
+</dialog>
 {% endblock %}

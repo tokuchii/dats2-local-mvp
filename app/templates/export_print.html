@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Print preview - DATS 2.0</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body class="print-page">
+<header class="print-header">
+  <div>
+    <p class="eyebrow">DATS 2.0 Observatory</p>
+    <h1>Filtered systems export</h1>
+    <p class="print-meta">
+      {% if total > print_count %}First {{ print_count }} of {{ total }} matching records{% else %}{{ print_count }} matching record{% if print_count != 1 %}s{% endif %}{% endif %}
+      &middot; {{ columns|length }} key columns &middot; Generated {{ generated_at }}
+    </p>
+  </div>
+  <div class="print-actions no-print">
+    <button type="button" class="button primary" onclick="window.print()">Print</button>
+    <a class="button" href="/systems{% if export_query %}?{{ export_query }}{% endif %}">Back to systems</a>
+  </div>
+</header>
+
+<div class="print-filters no-print">
+  <div class="filter-chips">
+    <span class="eyebrow">Active filters</span>
+    {% if active_filters %}
+      {% for label, value in active_filters %}<span class="chip"><b>{{ label }}</b>{{ value }}</span>{% endfor %}
+    {% else %}
+      <span class="chip">All records</span>
+    {% endif %}
+  </div>
+</div>
+
+<table class="print-table">
+  <colgroup>{% for key, label in columns %}<col class="print-col-{{ key }}">{% endfor %}</colgroup>
+  <thead><tr>{% for key, label in columns %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>{% for key, label in columns %}<td>{{ row[key] if row[key] is not none else '' }}</td>{% endfor %}</tr>
+  {% else %}
+    <tr><td colspan="{{ columns|length }}" class="empty">No matching records.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<footer class="print-footer">
+  Key columns shown for readability. The XLSX download includes all {{ all_columns_count }} columns.
+  Local, human-reviewed DATS 2.0 registry. Agent assessments are proposals until approved.
+</footer>
+
+<script>
+(function () {
+  if (new URLSearchParams(window.location.search).get('auto') !== '1') return;
+  function start() {
+    window.setTimeout(function () { window.print(); }, 250);
+  }
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(start);
+  } else {
+    window.addEventListener('load', start);
+  }
+})();
+</script>
+</body>
+</html>

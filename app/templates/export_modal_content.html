@@ -1,0 +1,50 @@
+<div class="export-modal-header">
+  <div>
+    <p class="eyebrow">Export preview</p>
+    <h2 id="export-modal-title" class="export-modal-title" tabindex="-1" data-export-title>Review before export</h2>
+    <p class="export-modal-meta">
+      {% if preview_count < total %}Showing the first {{ preview_count }} of {{ total }} matching records.{% else %}{{ total }} matching record{% if total != 1 %}s{% endif %}.{% endif %}
+    </p>
+  </div>
+  <button type="button" class="icon-button" data-export-close aria-label="Close export preview">&times;</button>
+</div>
+
+<div class="export-modal-filters">
+  <div class="filter-chips">
+    <span class="eyebrow">Active filters</span>
+    {% if active_filters %}
+      {% for label, value in active_filters %}<span class="chip"><b>{{ label }}</b>{{ value }}</span>{% endfor %}
+    {% else %}
+      <span class="chip">All records</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="export-modal-body">
+  {% if rows %}<p class="export-modal-scroll-note">Scroll sideways to view all {{ columns|length }} columns.</p>{% endif %}
+  <div class="table-wrap export-modal-table-wrap">
+    <table class="export-table export-modal-table">
+      <thead><tr>{% for key, label in columns %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>{% for key, label in columns %}<td>{{ row[key] if row[key] is not none else '' }}</td>{% endfor %}</tr>
+      {% else %}
+        <tr><td colspan="{{ columns|length }}" class="empty">No matching records.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="export-modal-actions">
+  <p class="export-modal-note">
+    {% if total > print_count %}Print includes a key-column view of the first {{ print_count }} filtered records.{% else %}Print includes a key-column view of all {{ print_count }} filtered record{% if print_count != 1 %}s{% endif %}.{% endif %}
+    XLSX includes all {{ columns|length }} columns.
+  </p>
+  <div class="export-modal-buttons">
+    <button type="button" class="button primary" data-export-print data-print-url="/export/print?{% if export_query %}{{ export_query }}&{% endif %}auto=1" {% if not total %}disabled{% endif %}>Print</button>
+    <a class="button" href="/export/current.xlsx{% if export_query %}?{{ export_query }}{% endif %}">Download XLSX</a>
+    <a class="button" href="/export/current.csv{% if export_query %}?{{ export_query }}{% endif %}">Download CSV</a>
+    <button type="button" class="button ghost" data-export-close>Close</button>
+  </div>
+</div>

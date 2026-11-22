@@ -5,7 +5,9 @@ import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -16,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 
 from .agent import DATS_CATEGORIES, process_submission
 from .config import MAX_UPLOAD_MB, REVIEWER_TOKEN, ROOT, UPLOAD_DIR
+from .preferences import PREFERENCES_COOKIE, parse_preferences
 from .sse import publish, subscribe
 
 logging.basicConfig(
@@ -24,12 +27,16 @@ logging.basicConfig(
 )
 log = logging.getLogger("dats2")
 from .db import (
+    EXPORT_COLUMNS,
+    EXPORT_FILTER_LABELS,
+    EXPORT_LIMIT,
     approve_candidate,
     count_candidates,
     count_systems,
     create_submission,
     export_csv_bytes,
     export_xlsx_bytes,
+    format_export_rows,
     get_candidate,
     get_filter_values,
     get_submission,
@@ -118,7 +125,46 @@ templates.env.filters["fmt_time"] = _fmt_time
 
 def context(request: Request, **kwargs):
     masked = "•" * len(REVIEWER_TOKEN) if REVIEWER_TOKEN else ""
-    return {"request": request, "categories": DATS_CATEGORIES, "proposed_count": count_candidates("proposed"), "reviewer_token": REVIEWER_TOKEN, "reviewer_token_display": masked, **kwargs}
+    preferences = parse_preferences(request.cookies.get(PREFERENCES_COOKIE))
+    return {"request": request, "categories": DATS_CATEGORIES, "proposed_count": count_candidates("proposed"), "reviewer_token": REVIEWER_TOKEN, "reviewer_token_display": masked, "preferences": preferences, **kwargs}
+
+
+PREVIEW_LIMIT = 1000
+MODAL_PREVIEW_LIMIT = 100
+PRINT_COLUMNS = [
+    column
+    for column in EXPORT_COLUMNS
+    if column[0]
+    in {
+        "dats2_id",
+        "name",
+        "acronym",
+        "developer_owner",
+        "sector_commodity",
+        "geographic_scope",
+        "primary_category",
+        "operating_status",
+        "interoperability_score",
+        "source_url_1",
+        "sinag_priority",
+    }
+]
+
+
+def _export_query(values: dict[str, str]) -> str:
+    return urlencode({key: value for key, value in values.items() if value})
+
+
+def _export_filter_state(search: str, category: str, status: str, commodity: str, livestock: str):
+    filters = {
+        "search": search.strip(),
+        "category": category,
+        "status": status,
+        "commodity": commodity,
+        "livestock": livestock,
+    }
+    active_filters = [(label, filters[key]) for key, label in EXPORT_FILTER_LABELS if filters[key]]
+    return filters, active_filters
 
 
 def split_form_tags(value: str | None) -> list[str]:
@@ -189,17 +235,19 @@ def systems_page(
     total_pages = max(1, (total + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
     systems = list_systems(search, category, status, commodity, livestock, limit=per_page, offset=(page - 1) * per_page)
-    filters = get_filter_values()
+    filter_options = get_filter_values()
+    active_filters = {"search": search, "category": category, "status": status, "commodity": commodity, "livestock": livestock}
     return templates.TemplateResponse(
         request,
         "systems.html",
         context(
             request,
             systems=systems,
-            filters={"search": search, "category": category, "status": status, "commodity": commodity, "livestock": livestock},
-            statuses=filters["statuses"],
-            commodities=filters["commodities"],
-            livestock_values=filters["livestock"],
+            filters=active_filters,
+            export_query=_export_query(active_filters),
+            statuses=filter_options["statuses"],
+            commodities=filter_options["commodities"],
+            livestock_values=filter_options["livestock"],
             page=page,
             total_pages=total_pages,
             total=total,
@@ -445,19 +493,122 @@ def audit_page(request: Request):
     return templates.TemplateResponse(request, "audit.html", context(request, events=list_audit()))
 
 
+@app.get("/export/preview", response_class=HTMLResponse)
+def export_preview(
+    request: Request,
+    search: str = "",
+    category: str = "",
+    status: str = "",
+    commodity: str = "",
+    livestock: str = "",
+):
+    filters, active_filters = _export_filter_state(search, category, status, commodity, livestock)
+    total = count_systems(**filters)
+    systems = list_systems(**filters, limit=PREVIEW_LIMIT)
+    rows = format_export_rows(systems)
+    return templates.TemplateResponse(
+        request,
+        "export_preview.html",
+        context(
+            request,
+            filters=filters,
+            active_filters=active_filters,
+            rows=rows,
+            columns=EXPORT_COLUMNS,
+            total=total,
+            print_count=min(total, EXPORT_LIMIT),
+            export_query=_export_query(filters),
+        ),
+    )
+
+
+@app.get("/export/modal", response_class=HTMLResponse)
+def export_modal(
+    request: Request,
+    search: str = "",
+    category: str = "",
+    status: str = "",
+    commodity: str = "",
+    livestock: str = "",
+):
+    filters, active_filters = _export_filter_state(search, category, status, commodity, livestock)
+    total = count_systems(**filters)
+    systems = list_systems(**filters, limit=MODAL_PREVIEW_LIMIT)
+    rows = format_export_rows(systems)
+    return templates.TemplateResponse(
+        request,
+        "export_modal_content.html",
+        {
+            "request": request,
+            "active_filters": active_filters,
+            "rows": rows,
+            "columns": EXPORT_COLUMNS,
+            "total": total,
+            "preview_count": len(rows),
+            "print_count": min(total, EXPORT_LIMIT),
+            "export_query": _export_query(filters),
+        },
+    )
+
+
+@app.get("/export/print", response_class=HTMLResponse)
+def export_print(
+    request: Request,
+    search: str = "",
+    category: str = "",
+    status: str = "",
+    commodity: str = "",
+    livestock: str = "",
+):
+    filters, active_filters = _export_filter_state(search, category, status, commodity, livestock)
+    total = count_systems(**filters)
+    systems = list_systems(**filters, limit=EXPORT_LIMIT)
+    rows = format_export_rows(systems)
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return templates.TemplateResponse(
+        request,
+        "export_print.html",
+        {
+            "request": request,
+            "active_filters": active_filters,
+            "rows": rows,
+            "columns": PRINT_COLUMNS,
+            "all_columns_count": len(EXPORT_COLUMNS),
+            "total": total,
+            "print_count": min(total, EXPORT_LIMIT),
+            "generated_at": generated_at,
+            "export_query": _export_query(filters),
+        },
+    )
+
+
 @app.get("/export/current.xlsx")
-def export_xlsx(request: Request):
+def export_xlsx(
+    request: Request,
+    search: str = "",
+    category: str = "",
+    status: str = "",
+    commodity: str = "",
+    livestock: str = "",
+):
     return Response(
-        export_xlsx_bytes(),
+        export_xlsx_bytes(search, category, status, commodity, livestock),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="DATS_2.0_Current_Database.xlsx"'},
     )
 
 
 @app.get("/export/current.csv")
-def export_csv(request: Request):
+def export_csv(
+    request: Request,
+    search: str = "",
+    category: str = "",
+    status: str = "",
+    commodity: str = "",
+    livestock: str = "",
+):
     return Response(
-        export_csv_bytes(),
+        export_csv_bytes(search, category, status, commodity, livestock),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="DATS_2.0_Current_Database.csv"'},
     )

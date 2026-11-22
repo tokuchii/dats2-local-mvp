@@ -13,6 +13,8 @@ from typing import Any, Iterator
 import psycopg2
 import psycopg2.pool
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 from .config import DATABASE_URL, MASTER_XLSX
 from .sse import publish
@@ -374,7 +376,7 @@ def list_systems(search: str = "", category: str = "", status: str = "", commodi
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY (CASE WHEN dats2_id ~ '^D2-[0-9]+$' THEN CAST(SUBSTR(dats2_id, 4) AS INTEGER) ELSE 0 END) DESC LIMIT %s OFFSET %s"
-    params.extend([min(max(limit, 1), 2000), max(offset, 0)])
+    params.extend([min(max(limit, 1), 10000), max(offset, 0)])
     with connect() as conn:
         cur = conn.cursor()
         cur.execute(sql, params)
@@ -665,63 +667,165 @@ def list_audit(limit: int = 200) -> list[dict[str, Any]]:
     return result
 
 
-def export_xlsx_bytes() -> bytes:
-    systems = list_systems(limit=5000)
+EXPORT_LIMIT = 10000
+
+EXPORT_FILTER_LABELS = [
+    ("search", "Search"),
+    ("category", "Functional category"),
+    ("status", "Status"),
+    ("commodity", "Commodity / species"),
+    ("livestock", "Livestock / poultry"),
+]
+
+EXPORT_COLUMNS = [
+    ("dats2_id", "DATS2_ID"),
+    ("name", "System / Tool"),
+    ("acronym", "Acronym"),
+    ("developer_owner", "Developer / Owner"),
+    ("owner_type", "Owner Type"),
+    ("sector_commodity", "Sector / Commodity"),
+    ("geographic_scope", "Geographic Scope"),
+    ("primary_category", "Primary Category"),
+    ("secondary_categories", "Secondary Categories"),
+    ("commodity_tags", "Commodity / Species Tags"),
+    ("value_chain_tags", "Value-chain Tags"),
+    ("technology_tags", "Technology Tags"),
+    ("livestock_coverage", "Livestock / Poultry Coverage"),
+    ("core_function", "Core Function"),
+    ("technology_channel", "Technology / Channel"),
+    ("primary_users", "Primary Users"),
+    ("maturity", "Maturity"),
+    ("operating_status", "Operating Status"),
+    ("evidence_of_scale", "Evidence of Scale"),
+    ("primary_bottleneck", "Primary Bottleneck"),
+    ("interoperability", "Interoperability"),
+    ("interoperability_score", "Interop Score"),
+    ("source_url_1", "Source URL 1"),
+    ("source_url_2", "Source URL 2"),
+    ("evidence_confidence", "Evidence Confidence"),
+    ("sinag_priority", "SINAG Priority"),
+    ("recommended_sinag_action", "Recommended SINAG Action"),
+    ("current_version", "Version"),
+    ("updated_at", "Updated At"),
+]
+
+
+def _safe_export_value(value: Any) -> Any:
+    if isinstance(value, str) and value and value[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
+def format_export_rows(systems: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for item in systems:
+        row = {}
+        for key, _ in EXPORT_COLUMNS:
+            value = item.get(key)
+            if isinstance(value, list):
+                value = "; ".join(str(part) for part in value)
+            row[key] = _safe_export_value(value)
+        rows.append(row)
+    return rows
+
+
+def _style_systems_sheet(ws, rows: list[dict[str, Any]]) -> None:
+    header_fill = PatternFill("solid", fgColor="0B2E59")
+    header_font = Font(color="FFFFFF", bold=True, size=10)
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    body_font = Font(size=10, color="1F2937")
+    body_alignment = Alignment(vertical="top", wrap_text=True)
+    alt_fill = PatternFill("solid", fgColor="E6F4FF")
+    border = Border(
+        left=Side(style="thin", color="CCF2FF"),
+        right=Side(style="thin", color="CCF2FF"),
+        top=Side(style="thin", color="CCF2FF"),
+        bottom=Side(style="thin", color="CCF2FF"),
+    )
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+        cell.border = border
+    ws.row_dimensions[1].height = 36
+    for row_idx, row in enumerate(ws.iter_rows(min_row=2, max_row=ws.max_row), start=2):
+        for cell in row:
+            cell.font = body_font
+            cell.alignment = body_alignment
+            cell.border = border
+            if row_idx % 2 == 0:
+                cell.fill = alt_fill
+        ws.row_dimensions[row_idx].height = 32
+    for col_idx, (key, label) in enumerate(EXPORT_COLUMNS, start=1):
+        longest = len(label)
+        for row in rows:
+            value = row.get(key)
+            if value not in (None, ""):
+                longest = max(longest, min(len(str(value)), 80))
+        ws.column_dimensions[get_column_letter(col_idx)].width = min(max(12, longest + 2), 48)
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+    ws.sheet_view.showGridLines = False
+    ws.print_title_rows = "1:1"
+
+
+def _style_export_info(ws, filters: dict[str, str], row_count: int) -> None:
+    ws.sheet_view.showGridLines = False
+    ws.column_dimensions["A"].width = 24
+    ws.column_dimensions["B"].width = 80
+    ws["A1"] = "DATS 2.0 Systems Export"
+    ws["A1"].font = Font(size=16, bold=True, color="0B2E59")
+    ws.merge_cells("A1:B1")
+    ws["A2"] = "Generated"
+    ws["B2"] = datetime.now().astimezone().strftime("%b %d, %Y %I:%M %p %Z")
+    ws["A3"] = "Rows"
+    ws["B3"] = row_count
+    ws["A5"] = "Filters"
+    ws["A5"].font = Font(bold=True, color="0B2E59")
+    row = 6
+    for key, label in EXPORT_FILTER_LABELS:
+        ws.cell(row=row, column=1, value=label)
+        ws.cell(row=row, column=2, value=filters.get(key) or "All")
+        row += 1
+    ws.cell(row=row + 1, column=1, value="Note").font = Font(bold=True, color="0B2E59")
+    ws.cell(row=row + 1, column=2, value="Rows match the active filters used on the export preview page.")
+    for row_cells in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=2):
+        for cell in row_cells:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+    for cell in ws["A"]:
+        if cell.value and cell.row >= 2:
+            cell.font = Font(bold=True, color="0B2E59")
+
+
+def export_xlsx_bytes(search: str = "", category: str = "", status: str = "", commodity: str = "", livestock: str = "") -> bytes:
+    systems = list_systems(search, category, status, commodity, livestock, limit=EXPORT_LIMIT)
+    rows = format_export_rows(systems)
     wb = Workbook()
     ws = wb.active
     ws.title = "Systems"
-    headers = [
-        "DATS2_ID", "System / Tool", "Acronym", "Developer / Owner", "Owner Type",
-        "Sector / Commodity", "Geographic Scope", "Primary Category", "Secondary Categories",
-        "Commodity / Species Tags", "Value-chain Tags", "Technology Tags", "Livestock / Poultry Coverage",
-        "Core Function", "Technology / Channel", "Primary Users", "Maturity", "Operating Status",
-        "Evidence of Scale", "Primary Bottleneck", "Interoperability", "Interop Score",
-        "Source URL 1", "Source URL 2", "Evidence Confidence", "SINAG Priority", "Recommended SINAG Action",
-        "Version", "Updated At",
-    ]
-    ws.append(headers)
-    for item in systems:
-        ws.append([
-            item["dats2_id"], item["name"], item.get("acronym"), item.get("developer_owner"), item.get("owner_type"),
-            item.get("sector_commodity"), item.get("geographic_scope"), item.get("primary_category"),
-            "; ".join(item.get("secondary_categories", [])), "; ".join(item.get("commodity_tags", [])),
-            "; ".join(item.get("value_chain_tags", [])), "; ".join(item.get("technology_tags", [])),
-            item.get("livestock_coverage"), item.get("core_function"), item.get("technology_channel"),
-            item.get("primary_users"), item.get("maturity"), item.get("operating_status"), item.get("evidence_of_scale"),
-            item.get("primary_bottleneck"), item.get("interoperability"), item.get("interoperability_score"),
-            item.get("source_url_1"), item.get("source_url_2"), item.get("evidence_confidence"), item.get("sinag_priority"),
-            item.get("recommended_sinag_action"), item.get("current_version"), item.get("updated_at"),
-        ])
-    for cell in ws[1]:
-        cell.font = cell.font.copy(bold=True)
-    ws.freeze_panes = "A2"
+    ws.append([label for _, label in EXPORT_COLUMNS])
+    for row in rows:
+        ws.append([row[key] for key, _ in EXPORT_COLUMNS])
+    _style_systems_sheet(ws, rows)
+    info = wb.create_sheet("Export Info")
+    _style_export_info(
+        info,
+        {"search": search, "category": category, "status": status, "commodity": commodity, "livestock": livestock},
+        len(rows),
+    )
+    wb.properties.title = "DATS 2.0 Systems Export"
+    wb.properties.creator = "DATS 2.0"
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
 
 
-def export_csv_bytes() -> bytes:
-    systems = list_systems(limit=5000)
-    fieldnames = [
-        "dats2_id", "name", "acronym", "developer_owner", "owner_type",
-        "sector_commodity", "geographic_scope", "primary_category",
-        "secondary_categories", "commodity_tags", "value_chain_tags",
-        "technology_tags", "livestock_coverage", "core_function",
-        "technology_channel", "primary_users", "maturity", "operating_status",
-        "evidence_of_scale", "primary_bottleneck", "interoperability",
-        "interoperability_score", "source_url_1", "source_url_2",
-        "evidence_confidence", "sinag_priority", "recommended_sinag_action",
-        "current_version", "updated_at",
-    ]
+def export_csv_bytes(search: str = "", category: str = "", status: str = "", commodity: str = "", livestock: str = "") -> bytes:
+    systems = list_systems(search, category, status, commodity, livestock, limit=EXPORT_LIMIT)
+    rows = format_export_rows(systems)
+    fieldnames = [key for key, _ in EXPORT_COLUMNS]
     out = io.StringIO()
     writer = csv.DictWriter(out, fieldnames=fieldnames)
     writer.writeheader()
-    for item in systems:
-        row = {}
-        for key in fieldnames:
-            val = item.get(key)
-            if isinstance(val, list):
-                val = "; ".join(str(v) for v in val)
-            row[key] = val
-        writer.writerow(row)
+    writer.writerows(rows)
     return out.getvalue().encode("utf-8-sig")

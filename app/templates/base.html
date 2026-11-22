@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-reduce-motion="{{ 'true' if preferences.reduce_motion else 'false' }}" data-hide-hints="{{ 'true' if preferences.hide_hints else 'false' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,8 +7,9 @@
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='favicon.svg') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+  <script src="{{ url_for('static', path='preferences.js') }}" defer></script>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -23,15 +24,37 @@
     <a href="/audit" class="{% if current == '/audit' %}active{% endif %}">Audit</a>
   </nav>
   <div class="top-actions">
-    <a class="button ghost" href="/export/current.xlsx">Export XLSX</a>
+    <a class="button ghost" href="/export/preview">Export</a>
   </div>
 </header>
 <main class="container">
   {% block content %}{% endblock %}
 </main>
 <footer>
-  Local, human-reviewed DATS 2.0 registry. Agent assessments are proposals until approved.
+  <span>Local, human-reviewed DATS 2.0 registry. Agent assessments are proposals until approved.</span>
+  <button class="footer-link" type="button" data-preferences-open aria-haspopup="dialog">Preferences</button>
 </footer>
+<dialog id="preferences-dialog" class="preferences-dialog" aria-labelledby="preferences-title" aria-describedby="preferences-note">
+  <div class="preferences-card">
+    <div class="preferences-header">
+      <div><p class="eyebrow">Browser preferences</p><h2 id="preferences-title">Display</h2></div>
+      <button class="icon-button preferences-close" type="button" data-preferences-close aria-label="Close preferences">&times;</button>
+    </div>
+    <label class="preference-row">
+      <span><strong>Reduce motion</strong><small>Stops chart reveals and interface movement.</small></span>
+      <input type="checkbox" data-pref-reduce-motion>
+    </label>
+    <label class="preference-row">
+      <span><strong>Table scroll hints</strong><small>Show the swipe reminder above wide tables.</small></span>
+      <input type="checkbox" data-pref-show-hints>
+    </label>
+    <p class="preferences-note" id="preferences-note">Saved only in this browser with a preference cookie. No tracking.</p>
+    <div class="preferences-actions">
+      <button class="button ghost" type="button" data-preferences-reset>Reset</button>
+      <button class="button primary" type="button" data-preferences-save>Save preferences</button>
+    </div>
+  </div>
+</dialog>
 <div class="toast-container" id="toasts"></div>
 <script>
 (function(){

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Export preview — DATS 2.0{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">Export preview</p>
+    <h1>Review before download</h1>
+    <p>{{ total }} matching record{% if total != 1 %}s{% endif %}. {{ columns|length }} columns, plus an Export Info sheet in the workbook.</p>
+  </div>
+  <div class="heading-actions">
+    <a class="button primary" href="/export/current.xlsx{% if export_query %}?{{ export_query }}{% endif %}">Download XLSX</a>
+    <a class="button" href="/export/current.csv{% if export_query %}?{{ export_query }}{% endif %}">Download CSV</a>
+    <a class="button" href="/export/print?{% if export_query %}{{ export_query }}&{% endif %}auto=1" target="_blank" rel="noopener">Print</a>
+    <a class="button" href="/systems{% if export_query %}?{{ export_query }}{% endif %}">Back to systems</a>
+  </div>
+</div>
+
+<section class="panel export-summary">
+  <div class="filter-chips">
+    <span class="eyebrow">Active filters</span>
+    {% if active_filters %}
+      {% for label, value in active_filters %}<span class="chip"><b>{{ label }}</b>{{ value }}</span>{% endfor %}
+    {% else %}
+      <span class="chip">All records</span>
+    {% endif %}
+  </div>
+  {% if total > rows|length %}
+  <p class="muted-note">Previewing the first {{ rows|length }} of {{ total }} matching records. The download includes the full filtered set.</p>
+  {% endif %}
+</section>
+
+<section class="panel table-panel export-preview">
+  <div class="table-wrap">
+    <table class="wide-table export-table">
+      <thead><tr>{% for key, label in columns %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>{% for key, label in columns %}<td>{{ row[key] if row[key] is not none else '' }}</td>{% endfor %}</tr>
+      {% else %}
+        <tr><td colspan="{{ columns|length }}" class="empty">No matching records.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted-note export-scroll-note">Scroll horizontally to view all {{ columns|length }} columns.</p>
+</section>
+{% endblock %}
