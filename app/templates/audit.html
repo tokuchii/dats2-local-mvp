@@ -1,17 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Audit log — DATS 2.0{% endblock %}
+{% block head %}<script src="{{ url_for('static', path='audit-actions.js') }}" defer></script>{% endblock %}
 {% block content %}
-<div class="page-heading"><div><p class="eyebrow">Governance trail</p><h1>Audit log</h1><p>Imports, approvals, merges and rejections are retained as immutable activity records.</p></div></div>
-<section class="panel table-panel"><div class="table-wrap"><table class="wide-table"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th></tr></thead><tbody>{% for event in events %}<tr>
+<div class="page-heading"><div><p class="eyebrow">Governance trail</p><h1>Audit log</h1><p>Imports, submissions, approvals, merges and rejections are retained as immutable activity records. Corrections add a new event rather than erasing history.</p></div></div>
+<section class="panel table-panel"><div class="table-wrap"><table class="wide-table audit-table"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>Actions</th></tr></thead><tbody>{% for event in events %}<tr>
   <td style="white-space:nowrap;">{{ event.created_at | fmt_time }}</td>
   <td><span class="tag">{{ event.actor }}</span></td>
   <td>
     {% if event.action == 'import_master' %}
       <span class="tag primary-tag">Import</span>
+    {% elif event.action == 'submit' %}
+      <span class="tag primary-tag">Submitted</span>
     {% elif event.action == 'approve_candidate' %}
       <span class="tag" style="background:#d4edda;color:#155724;">Approved</span>
     {% elif event.action == 'reject_candidate' %}
       <span class="tag" style="background:#f8d7da;color:#721c24;">Rejected</span>
+    {% elif event.action in ('delete_submission', 'delete_approval') %}
+      <span class="tag" style="background:#fff5f4;color:#b42318;">Deleted</span>
     {% else %}
       <span class="tag">{{ event.action }}</span>
     {% endif %}
@@ -20,7 +25,13 @@
     {% if event.entity_type == 'system' and event.entity_id %}
       <a href="/systems/{{ event.entity_id }}">{{ event.entity_id }}</a>
     {% elif event.entity_type == 'candidate' and event.entity_id %}
-      <a href="/review/{{ event.entity_id }}">Candidate #{{ event.entity_id }}</a>
+      {% if event.action == 'delete_approval' %}
+        Candidate #{{ event.entity_id }} <small>(deleted)</small>
+      {% else %}
+        <a href="/review/{{ event.entity_id }}">Candidate #{{ event.entity_id }}</a>
+      {% endif %}
+    {% elif event.entity_type == 'submission' %}
+      Submission #{{ event.entity_id }}{% if event.action == 'delete_submission' %} <small>(deleted)</small>{% endif %}
     {% else %}
       {{ event.entity_type }} · {{ event.entity_id }}
     {% endif %}
@@ -28,6 +39,8 @@
   <td>
     {% if event.action == 'import_master' %}
       Imported <strong>{{ event.details.imported }}</strong> systems from <code>{{ event.details.file }}</code>
+    {% elif event.action == 'submit' %}
+      {{ event.details.source_type|capitalize }} submission{% if event.details.source_uri %} from <code>{{ event.details.source_uri }}</code>{% endif %}
     {% elif event.action == 'approve_candidate' %}
       {% if event.details.merge_into %}
         Merged into <a href="/systems/{{ event.details.merge_into }}">{{ event.details.merge_into }}</a>
@@ -41,9 +54,43 @@
       {% else %}
         <span style="color:#999;">No note provided</span>
       {% endif %}
+    {% elif event.action == 'delete_submission' %}
+      Deleted from the audit log
+      {% if event.details.source_uri %}<br><small style="color:#666;">Source: {{ event.details.source_uri }}</small>{% endif %}
+    {% elif event.action == 'delete_approval' %}
+      Deleted the approved record for {{ event.details.dats2_id }}
+      {% if event.details.removed_system %}
+        and removed the system.
+      {% else %}
+        and restored version {{ event.details.restored_version }}.
+      {% endif %}
+      {% if event.details.source_uri %}<br><small style="color:#666;">Source: {{ event.details.source_uri }}</small>{% endif %}
     {% else %}
       <code>{{ event.details }}</code>
     {% endif %}
   </td>
-</tr>{% else %}<tr><td colspan="5" class="empty">No audit events.</td></tr>{% endfor %}</tbody></table></div></section>
+  <td class="audit-actions">
+    {% if event.can_delete and event.delete_candidate_id %}
+      <button class="button danger compact" type="button" data-audit-action data-action-url="/audit/approvals/{{ event.delete_candidate_id }}/delete" data-action-warning="This deletes the approved record for candidate #{{ event.delete_candidate_id }} and its submission. A new system is removed; a merge is reverted to the previous version. The deletion is recorded in the audit log.">Delete</button>
+    {% elif event.can_delete %}
+      <button class="button danger compact" type="button" data-audit-action data-action-url="/audit/submissions/{{ event.delete_submission_id }}/delete" data-action-warning="This permanently deletes submission #{{ event.delete_submission_id }}, its proposal, and its uploaded file. The deletion is recorded in the audit log.">Delete</button>
+    {% else %}
+      <span class="audit-no-action">—</span>
+    {% endif %}
+  </td>
+</tr>{% else %}<tr><td colspan="6" class="empty">No audit events.</td></tr>{% endfor %}</tbody></table></div></section>
+
+<dialog id="audit-action-dialog" class="preferences-dialog audit-action-dialog" aria-labelledby="audit-action-title" aria-describedby="audit-action-warning">
+  <form id="audit-action-form" class="preferences-card" method="post">
+    <div class="preferences-header">
+      <div><p class="eyebrow">Delete submission</p><h2 id="audit-action-title">Confirm deletion</h2></div>
+      <button class="icon-button" type="button" data-audit-cancel aria-label="Close delete dialog">&times;</button>
+    </div>
+    <p class="audit-action-warning" id="audit-action-warning"></p>
+    <div class="preferences-actions">
+      <button class="button" type="button" data-audit-cancel>Cancel</button>
+      <button class="button danger" type="submit">Delete</button>
+    </div>
+  </form>
+</dialog>
 {% endblock %}

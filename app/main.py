@@ -31,9 +31,13 @@ from .db import (
     EXPORT_FILTER_LABELS,
     EXPORT_LIMIT,
     approve_candidate,
+    can_delete_approval,
+    can_delete_submission,
     count_candidates,
     count_systems,
     create_submission,
+    delete_approval,
+    delete_submission,
     export_csv_bytes,
     export_xlsx_bytes,
     format_export_rows,
@@ -488,9 +492,95 @@ def reject(
     return RedirectResponse("/review?success=Candidate+rejected", status_code=303)
 
 
+def _audit_error(message: str) -> RedirectResponse:
+    return RedirectResponse(f"/audit?{urlencode({'error': message})}", status_code=303)
+
+
+def _remove_uploaded_file(uploaded_path: str | None) -> None:
+    if not uploaded_path:
+        return
+    try:
+        path = Path(uploaded_path).resolve()
+        path.relative_to(UPLOAD_DIR.resolve())
+    except (OSError, ValueError):
+        log.warning("Refusing to remove upload outside the upload directory: %s", uploaded_path)
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        log.warning("Could not remove uploaded file: %s", uploaded_path, exc_info=True)
+
+
+def _decorate_audit_events(events: list[dict]) -> list[dict]:
+    seen_delete: set[int] = set()
+    seen_approve: set[int] = set()
+    for event in events:
+        action = event.get("action")
+        if action == "approve_candidate":
+            try:
+                candidate_id = int((event.get("details") or {}).get("candidate_id"))
+            except (TypeError, ValueError):
+                continue
+            if candidate_id in seen_approve:
+                continue
+            seen_approve.add(candidate_id)
+            allowed, _ = can_delete_approval(candidate_id)
+            event["can_delete"] = allowed
+            event["delete_candidate_id"] = candidate_id
+            continue
+        if action not in {"submit", "reject_candidate"}:
+            continue
+        if action == "submit":
+            try:
+                submission_id = int(event.get("entity_id"))
+            except (TypeError, ValueError):
+                continue
+        else:
+            try:
+                candidate_id = int(event.get("entity_id"))
+            except (TypeError, ValueError):
+                continue
+            candidate = get_candidate(candidate_id)
+            if not candidate:
+                continue
+            submission_id = candidate["submission_id"]
+        if submission_id in seen_delete:
+            continue
+        seen_delete.add(submission_id)
+        allowed, _ = can_delete_submission(submission_id)
+        event["can_delete"] = allowed
+        event["delete_submission_id"] = submission_id
+    return events
+
+
 @app.get("/audit", response_class=HTMLResponse)
 def audit_page(request: Request):
-    return templates.TemplateResponse(request, "audit.html", context(request, events=list_audit()))
+    events = _decorate_audit_events(list_audit())
+    return templates.TemplateResponse(request, "audit.html", context(request, events=events))
+
+
+@app.post("/audit/submissions/{submission_id}/delete")
+def audit_delete_submission(submission_id: int):
+    try:
+        result = delete_submission(submission_id)
+    except ValueError as exc:
+        return _audit_error(str(exc))
+    # The file is removed only after the database transaction has committed.
+    _remove_uploaded_file(result.get("uploaded_path"))
+    publish("proposed_count_changed", {"count": count_candidates("proposed")})
+    return RedirectResponse(f"/audit?{urlencode({'success': 'Submission deleted'})}", status_code=303)
+
+
+@app.post("/audit/approvals/{candidate_id}/delete")
+def audit_delete_approval(candidate_id: int):
+    try:
+        result = delete_approval(candidate_id)
+    except ValueError as exc:
+        return _audit_error(str(exc))
+    # The file is removed only after the database transaction has committed.
+    _remove_uploaded_file(result.get("uploaded_path"))
+    publish("proposed_count_changed", {"count": count_candidates("proposed")})
+    return RedirectResponse(f"/audit?{urlencode({'success': 'Approved record deleted'})}", status_code=303)
 
 
 @app.get("/export/preview", response_class=HTMLResponse)

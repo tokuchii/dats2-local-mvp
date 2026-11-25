@@ -427,7 +427,25 @@ def create_submission(source_type: str, source_uri: str | None = None, uploaded_
             "INSERT INTO submissions(source_type,source_uri,uploaded_path,pasted_text,submitted_by,status,created_at,updated_at) VALUES (%s,%s,%s,%s,%s,'queued',%s,%s) RETURNING id",
             (source_type, source_uri, uploaded_path, pasted_text, submitted_by, timestamp, timestamp),
         )
-        return cur.fetchone()[0]
+        submission_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO audit_events(actor,action,entity_type,entity_id,details_json,created_at) VALUES (%s,%s,%s,%s,%s,%s)",
+            (
+                submitted_by or "public",
+                "submit",
+                "submission",
+                str(submission_id),
+                _json(
+                    {
+                        "source_type": source_type,
+                        "source_uri": source_uri,
+                        "uploaded_file": Path(uploaded_path).name if uploaded_path else None,
+                    }
+                ),
+                timestamp,
+            ),
+        )
+        return submission_id
 
 
 def get_submission(submission_id: int) -> dict[str, Any] | None:
@@ -546,6 +564,41 @@ def save_candidate_payload(candidate_id: int, payload: dict[str, Any]) -> None:
         cur.execute("UPDATE candidates SET payload_json=%s WHERE id=%s AND status='proposed'", (_json(payload), candidate_id))
 
 
+def _version_payload_to_columns(payload: dict[str, Any]) -> dict[str, Any]:
+    if "System / Tool" not in payload:
+        return _payload_to_columns(payload)
+    mapped = {target: payload.get(header) for header, target in INVENTORY_KEYS.items()}
+    return {
+        "name": mapped.get("name") or "Unnamed system",
+        "acronym": mapped.get("acronym"),
+        "developer_owner": mapped.get("developer_owner"),
+        "owner_type": mapped.get("owner_type"),
+        "sector_commodity": mapped.get("sector_commodity"),
+        "geographic_scope": mapped.get("geographic_scope"),
+        "primary_category": mapped.get("primary_category") or "Unclassified",
+        "secondary_categories_json": _json(split_tags(mapped.get("secondary_categories"))),
+        "commodity_tags_json": _json(split_tags(mapped.get("commodity_tags"))),
+        "value_chain_tags_json": _json(split_tags(mapped.get("value_chain_tags"))),
+        "technology_tags_json": _json(split_tags(mapped.get("technology_tags"))),
+        "livestock_coverage": mapped.get("livestock_coverage"),
+        "core_function": mapped.get("core_function"),
+        "technology_channel": mapped.get("technology_channel"),
+        "primary_users": mapped.get("primary_users"),
+        "maturity": mapped.get("maturity"),
+        "operating_status": mapped.get("operating_status"),
+        "evidence_of_scale": mapped.get("evidence_of_scale"),
+        "main_scaling_strength": mapped.get("main_scaling_strength"),
+        "primary_bottleneck": mapped.get("primary_bottleneck"),
+        "interoperability": mapped.get("interoperability"),
+        "interoperability_score": None,
+        "source_url_1": mapped.get("source_url_1"),
+        "source_url_2": mapped.get("source_url_2"),
+        "evidence_confidence": mapped.get("evidence_confidence"),
+        "sinag_priority": mapped.get("sinag_priority"),
+        "recommended_sinag_action": mapped.get("recommended_sinag_action"),
+    }
+
+
 def _payload_to_columns(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "name": payload.get("system_name") or "Unnamed system",
@@ -649,6 +702,216 @@ def reject_candidate(candidate_id: int, actor: str, reviewer_note: str | None = 
             "INSERT INTO audit_events(actor,action,entity_type,entity_id,details_json,created_at) VALUES (%s,%s,%s,%s,%s,%s)",
             (actor, "reject_candidate", "candidate", str(candidate_id), _json({"note": reviewer_note}), timestamp),
         )
+
+
+def can_delete_submission(submission_id: int) -> tuple[bool, str]:
+    with connect() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT status FROM submissions WHERE id=%s", (submission_id,))
+        row = cur.fetchone()
+        if not row:
+            return False, "Submission not found"
+        status = row[0]
+        if status in ("queued", "running"):
+            return False, "Submission is still processing"
+        if status == "approved":
+            return False, "This submission has an approved record"
+        cur.execute("SELECT id, status FROM candidates WHERE submission_id=%s", (submission_id,))
+        candidates = cur.fetchall()
+        if any(candidate[1] == "approved" for candidate in candidates):
+            return False, "Approved submissions cannot be deleted"
+        candidate_ids = [candidate[0] for candidate in candidates]
+        if candidate_ids:
+            cur.execute("SELECT 1 FROM system_versions WHERE candidate_id = ANY(%s) LIMIT 1", (candidate_ids,))
+            if cur.fetchone():
+                return False, "A system version still references this proposal"
+        return True, ""
+
+
+def delete_submission(submission_id: int, actor: str = "local-reviewer") -> dict[str, Any]:
+    with connect() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status, source_type, source_uri, uploaded_path FROM submissions WHERE id=%s FOR UPDATE",
+            (submission_id,),
+        )
+        submission = cur.fetchone()
+        if not submission:
+            raise ValueError("Submission not found")
+        status, source_type, source_uri, uploaded_path = submission
+        if status in ("queued", "running"):
+            raise ValueError("Submission is still processing")
+        if status == "approved":
+            raise ValueError("This submission has an approved record")
+        cur.execute("SELECT id, status FROM candidates WHERE submission_id=%s FOR UPDATE", (submission_id,))
+        candidates = cur.fetchall()
+        if any(candidate[1] == "approved" for candidate in candidates):
+            raise ValueError("Approved submissions cannot be deleted")
+        candidate_ids = [candidate[0] for candidate in candidates]
+        if candidate_ids:
+            cur.execute("SELECT 1 FROM system_versions WHERE candidate_id = ANY(%s) LIMIT 1", (candidate_ids,))
+            if cur.fetchone():
+                raise ValueError("A system version still references this proposal")
+        timestamp = now_iso()
+        cur.execute(
+            "INSERT INTO audit_events(actor,action,entity_type,entity_id,details_json,created_at) VALUES (%s,%s,%s,%s,%s,%s)",
+            (
+                actor,
+                "delete_submission",
+                "submission",
+                str(submission_id),
+                _json(
+                    {
+                        "status": status,
+                        "source_type": source_type,
+                        "source_uri": source_uri,
+                        "uploaded_file": Path(uploaded_path).name if uploaded_path else None,
+                        "candidate_ids": candidate_ids,
+                    }
+                ),
+                timestamp,
+            ),
+        )
+        cur.execute("DELETE FROM submissions WHERE id=%s", (submission_id,))
+    return {
+        "submission_id": submission_id,
+        "uploaded_path": uploaded_path,
+        "candidate_ids": candidate_ids,
+    }
+
+
+def can_delete_approval(candidate_id: int) -> tuple[bool, str]:
+    with connect() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT status, submission_id FROM candidates WHERE id=%s", (candidate_id,))
+        candidate = cur.fetchone()
+        if not candidate:
+            return False, "Candidate not found"
+        status, submission_id = candidate
+        if status != "approved":
+            return False, "Candidate is not approved"
+        cur.execute(
+            "SELECT 1 FROM candidates WHERE submission_id=%s AND id<>%s AND status='approved' LIMIT 1",
+            (submission_id, candidate_id),
+        )
+        if cur.fetchone():
+            return False, "Submission has another approved record"
+        cur.execute(
+            """
+            SELECT sv.version, sv.system_id, s.current_version
+            FROM system_versions sv
+            JOIN systems s ON s.id = sv.system_id
+            WHERE sv.candidate_id=%s
+            ORDER BY sv.id DESC
+            LIMIT 1
+            """,
+            (candidate_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return False, "Approval version not found"
+        version, system_id, current_version = row
+        if version != current_version:
+            return False, "A newer system version exists"
+        if version > 1:
+            cur.execute("SELECT 1 FROM system_versions WHERE system_id=%s AND version=%s", (system_id, version - 1))
+            if not cur.fetchone():
+                return False, "Previous system version not found"
+        return True, ""
+
+
+def delete_approval(candidate_id: int, actor: str = "local-reviewer") -> dict[str, Any]:
+    timestamp = now_iso()
+    with connect() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT status, submission_id FROM candidates WHERE id=%s FOR UPDATE", (candidate_id,))
+        candidate = cur.fetchone()
+        if not candidate:
+            raise ValueError("Candidate not found")
+        status, submission_id = candidate
+        if status != "approved":
+            raise ValueError("Candidate is not approved")
+        cur.execute(
+            "SELECT 1 FROM candidates WHERE submission_id=%s AND id<>%s AND status='approved' LIMIT 1",
+            (submission_id, candidate_id),
+        )
+        if cur.fetchone():
+            raise ValueError("Submission has another approved record")
+        cur.execute(
+            "SELECT id, system_id, version FROM system_versions WHERE candidate_id=%s ORDER BY id DESC LIMIT 1",
+            (candidate_id,),
+        )
+        version_row = cur.fetchone()
+        if not version_row:
+            raise ValueError("Approval version not found")
+        version_id, system_id, version = version_row
+        cur.execute("SELECT dats2_id, current_version FROM systems WHERE id=%s FOR UPDATE", (system_id,))
+        system = cur.fetchone()
+        if not system:
+            raise ValueError("Approved system not found")
+        dats2_id, current_version = system
+        if version != current_version:
+            raise ValueError("A newer system version exists")
+        if version > 1:
+            cur.execute(
+                "SELECT payload_json FROM system_versions WHERE system_id=%s AND version=%s",
+                (system_id, version - 1),
+            )
+            previous = cur.fetchone()
+            if not previous:
+                raise ValueError("Previous system version not found")
+            previous_payload = _unjson(previous[0], {})
+            columns = _version_payload_to_columns(previous_payload)
+            set_clause = ", ".join(f"{key}=%s" for key in columns)
+            cur.execute(
+                f"UPDATE systems SET {set_clause}, payload_json=%s, current_version=%s, updated_at=%s WHERE id=%s",
+                [*columns.values(), _json(previous_payload), version - 1, timestamp, system_id],
+            )
+            cur.execute("DELETE FROM system_versions WHERE id=%s", (version_id,))
+            restored_version = version - 1
+            removed_system = False
+        else:
+            cur.execute("DELETE FROM systems WHERE id=%s", (system_id,))
+            restored_version = 0
+            removed_system = True
+        cur.execute(
+            "SELECT source_type, source_uri, uploaded_path FROM submissions WHERE id=%s",
+            (submission_id,),
+        )
+        submission = cur.fetchone()
+        if not submission:
+            raise ValueError("Submission not found")
+        source_type, source_uri, uploaded_path = submission
+        cur.execute(
+            "INSERT INTO audit_events(actor,action,entity_type,entity_id,details_json,created_at) VALUES (%s,%s,%s,%s,%s,%s)",
+            (
+                actor,
+                "delete_approval",
+                "candidate",
+                str(candidate_id),
+                _json(
+                    {
+                        "dats2_id": dats2_id,
+                        "submission_id": submission_id,
+                        "removed_system": removed_system,
+                        "restored_version": restored_version,
+                        "source_type": source_type,
+                        "source_uri": source_uri,
+                        "uploaded_file": Path(uploaded_path).name if uploaded_path else None,
+                    }
+                ),
+                timestamp,
+            ),
+        )
+        cur.execute("DELETE FROM submissions WHERE id=%s", (submission_id,))
+    return {
+        "candidate_id": candidate_id,
+        "submission_id": submission_id,
+        "dats2_id": dats2_id,
+        "uploaded_path": uploaded_path,
+        "removed_system": removed_system,
+        "restored_version": restored_version,
+    }
 
 
 def list_audit(limit: int = 200) -> list[dict[str, Any]]:

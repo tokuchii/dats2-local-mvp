@@ -492,6 +492,7 @@ td small, .candidate-card small, .review-row small { display: block; color: var(
 /* ---- Export modal ---- */
 body.export-modal-open { overflow: hidden; }
 body.preferences-open { overflow: hidden; }
+body.audit-action-open { overflow: hidden; }
 .export-modal, .preferences-dialog {
   opacity: 0;
   transform: translateY(8px) scale(.99);
@@ -653,6 +654,22 @@ body.preferences-open { overflow: hidden; }
   transition: color var(--transition-base);
 }
 .hint-dismiss:hover { color: var(--navy); }
+
+/* ---- Audit corrections ---- */
+.audit-actions { width: 1%; white-space: nowrap; }
+.audit-no-action { color: var(--muted); }
+.button.compact { padding: 7px 10px; font-size: 12px; }
+.audit-action-dialog { width: min(520px, calc(100vw - 32px)); max-width: 520px; }
+.audit-action-warning {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: #fff5f4;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.audit-action-dialog .preferences-actions { margin-top: 16px; }
 
 /* ---- Print page ---- */
 .print-page { background: #fff; color: var(--ink); padding: 24px; }
